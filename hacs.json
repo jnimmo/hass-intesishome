@@ -1,8 +1,7 @@
 {
     "name": "IntesisHome (Config flow)",
-    "hacs": "1.6.0",
     "domains": [
         "climate"
     ],
-    "homeassistant": "0.118.0"
+    "render_readme": true
 }
