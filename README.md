@@ -1,9 +1,11 @@
-# hass-intesishome
+# Home Assistant IntesisHome integration (bleeding edge)
 Experimental fork of the IntesisHome integration for Home Assistant
 
-*This project is seeking a new maintainer, I haven't owned an Intesis device for many years, and no longer have the time to contribute to this project. Please get in touch if you are interested in taking this over.*
+*This project is seeking a new maintainer, I haven't owned an Intesis device for many years, and no longer have the time to contribute to this project. Please get in touch if you are interested in taking this over. I've spent many mornings at the local coffee shop working on this project, if it has been useful to you please consider buying me a coffee with the link below, thank you!*
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/jnimmo)
+
 
 This custom integration is a fork of the core integration for IntesisHome which adds experimental support for local control over HTTP for selected devices, local control over WMP (IntesisBox), and cloud control for IntesisHome, anywAir, airconwithme.
 This is ready to integrate back into Home Assistant Core however it needs unit tests written for Config Flow for that to be able to happen, which I haven't got the time to invest in at this stage.
