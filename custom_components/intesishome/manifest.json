@@ -6,6 +6,6 @@
   "requirements": ["pyintesishome==1.8.1"],
   "iot_class": "cloud_push",
   "loggers": ["pyintesishome"],
-  "config_flow": true
+  "config_flow": true,
   "version": "1.0.0"
 }
