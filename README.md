@@ -1,5 +1,5 @@
-# Home Assistant IntesisHome integration (bleeding edge)
-Experimental fork of the IntesisHome integration for Home Assistant
+# Home Assistant IntesisHome integration (with config flow)
+Development fork of the IntesisHome integration for Home Assistant
 
 *This project is seeking a new maintainer, I haven't owned an Intesis device for many years, and no longer have the time to contribute to this project. Please get in touch if you are interested in taking this over. I've spent many mornings at the local coffee shop working on this project, if it has been useful to you please consider buying me a coffee with the link below, thank you!*
 
