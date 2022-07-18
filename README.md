@@ -16,17 +16,20 @@ This is ready to integrate back into Home Assistant Core however it needs unit t
 3. Select the device type
 4. Provide any additional required details (username, password, IP address) for your device
 
+## Cloud control
+Control of IntesisHome, anywAir, airconwithme devices generally is through a persistent connection to the Intesis cloud.
+This requires outgoing HTTPS access to connect to the API, then control moves to a TCP port specified by the API. 
 
-## Local control over HTTP (intesishome_local)
-This experimental feature allows local control over HTTP for some device types.
+## Local control
 
-## Local control over WMP (Intesisbox)
+### HTTP (intesishome_local)
+This experimental feature allows local control over HTTP for devices which expose an HTTP web server on port 80 (http://ip/api.cgi)
+| Device                  | HTTP - intesishome_local | 
+| ----------------------- |:-------------------------| 
+| DK-RC-WIFI-1B           | :white_check_mark:       | 
+| FJ-AC-WIFI-1B           | :white_check_mark:       |
+| MH-AC-WIFI-1            | :white_check_mark:       |
+| IS-ASX-WIFI-1           | :x:                      |
+
+### WMP (Intesisbox)
 There are two forks for Intesisbox support. Intesisbox support was added to the pyintesishome library which this integration uses, however the original https://github.com/jnimmo/hass-intesisbox integration is likely to be better maintaned for the time being. 
-
-## Device compatibility
-| Device                  | Local HTTP - intesishome_local  |
-| ----------------------- |:-------------| 
-| DK-RC-WIFI-1B           | :white_check_mark: | 
-| FJ-AC-WIFI-1B           | :white_check_mark: |
-| MH-AC-WIFI-1            | :white_check_mark: |
-| IS-ASX-WIFI-1           | :x:                |
