@@ -11,10 +11,11 @@ This custom integration is a fork of the core integration for IntesisHome which 
 This is ready to integrate back into Home Assistant Core however it needs unit tests written for Config Flow for that to be able to happen, which I haven't got the time to invest in at this stage.
 
 ## Configuration
-1. Install the integration
-2. Navigate to integrations and add the IntesisHome integration through the user interface
-3. Select the device type
-4. Provide any additional required details (username, password, IP address) for your device
+1. Add this custom repository to HACS, or manually download the files into your custom_components directory
+2. Restart Home Assistant
+3. [![Start IntesisHome configuration in Home Assistant](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start?domain=intesishome) or navigate to integrations and add the IntesisHome integration through the user interface 
+5. Select the device type
+6. Provide any additional required details (username, password, IP address) for your device
 
 ## Cloud control
 Control of IntesisHome, anywAir, airconwithme devices generally is through a persistent connection to the Intesis cloud.
