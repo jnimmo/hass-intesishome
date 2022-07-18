@@ -19,7 +19,14 @@ This is ready to integrate back into Home Assistant Core however it needs unit t
 
 ## Local control over HTTP (intesishome_local)
 This experimental feature allows local control over HTTP for some device types.
-If your Intesis controller supports this, please submit a pull request to update this readme to list supported devices.
 
-## Intesisbox
+## Local control over WMP (Intesisbox)
 There are two forks for Intesisbox support. Intesisbox support was added to the pyintesishome library which this integration uses, however the original https://github.com/jnimmo/hass-intesisbox integration is likely to be better maintaned for the time being. 
+
+## Device compatibility
+| Device                  | Local HTTP - intesishome_local  |
+| ----------------------- |:-------------| 
+| DK-RC-WIFI-1B           | :white_check_mark: | 
+| FJ-AC-WIFI-1B           | :white_check_mark: |
+| MH-AC-WIFI-1            | :white_check_mark: |
+| IS-ASX-WIFI-1           | :x:                |
