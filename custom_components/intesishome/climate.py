@@ -21,7 +21,6 @@ from pyintesishome.const import (
     DEVICE_INTESISHOME,
     DEVICE_INTESISHOME_LOCAL,
 )
-import voluptuous as vol
 
 from homeassistant import config_entries, core
 from homeassistant.components.climate import ClimateEntity
@@ -45,13 +44,10 @@ from homeassistant.const import (
     CONF_USERNAME,
     TEMP_CELSIUS,
 )
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from . import DOMAIN
 
@@ -104,8 +100,8 @@ MAP_STATE_ICONS = {
 async def async_setup_entry(
     hass: core.HomeAssistant,
     config_entry: config_entries.ConfigEntry,
-    async_add_entities,
-):
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     """Create climate entities from config flow."""
     config = config_entry.data
     if "controller" in hass.data[DOMAIN]:
@@ -191,7 +187,7 @@ class IntesisAC(ClimateEntity):
         self._min_temp: int = None
         self._target_temp: float = None
         self._outdoor_temp: float = None
-        self._hvac_mode: str = None
+        self._hvac_mode: HVACMode = None
         self._preset: str = None
         self._preset_list: list[str] = [PRESET_ECO, PRESET_COMFORT, PRESET_BOOST]
         self._run_hours: int = None
@@ -421,7 +417,11 @@ class IntesisAC(ClimateEntity):
             # Connection has dropped
             self._connected = False
             reconnect_seconds = 30
-            if self._device_type in [DEVICE_INTESISHOME, DEVICE_AIRCONWITHME]:
+            if self._device_type in [
+                DEVICE_INTESISHOME,
+                DEVICE_ANYWAIR,
+                DEVICE_AIRCONWITHME,
+            ]:
                 # Add a random delay for cloud connections
                 reconnect_seconds = randrange(30, 600)
 
@@ -459,7 +459,7 @@ class IntesisAC(ClimateEntity):
     @property
     def should_poll(self):
         """Poll for updates if pyIntesisHome doesn't have a socket open."""
-        return False
+        return True
 
     @property
     def fan_mode(self):

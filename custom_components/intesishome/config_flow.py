@@ -117,6 +117,7 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     password=user_input[CONF_PASSWORD],
                     loop=self.hass.loop,
                     websession=async_get_clientsession(self.hass),
+                    device_type=device_type,
                 )
 
         # Try to attempt a connection
