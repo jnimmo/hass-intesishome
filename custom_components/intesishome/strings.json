@@ -6,6 +6,12 @@
     "step": {
       "user": {
         "data": {
+          "device": "Device type"
+        },
+        "title": "Select the type of Intesis device to add"
+      },
+      "details": {
+        "data": {
           "device": "Device type",
           "host": "Hostname/IP address of the device",
           "password": "[%key:common::config_flow::data::password%]",

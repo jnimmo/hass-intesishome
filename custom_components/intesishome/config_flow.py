@@ -38,7 +38,7 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize."""
         self._data = {}
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(self, user_input=None) -> FlowResult:
         """Handle the initial device type selection step."""
         # unique_id = user_input["unique_id"]
         # await self.async_set_unique_id(unique_id)
@@ -68,7 +68,7 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=device_type_schema, errors=errors
         )
 
-    async def async_step_details(self, user_input=None):
+    async def async_step_details(self, user_input=None) -> FlowResult:
         """Handle the device connection step."""
         device_type = self._data.get(CONF_DEVICE)
         errors: dict[str, str] = {}
@@ -77,7 +77,7 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         cloud_schema = vol.Schema(
             {
                 vol.Required(CONF_DEVICE, default=device_type): vol.In(
-                    [DEVICE_AIRCONWITHME, DEVICE_INTESISHOME]
+                    [DEVICE_AIRCONWITHME, DEVICE_INTESISHOME, DEVICE_ANYWAIR]
                 ),
                 vol.Required(CONF_USERNAME): str,
                 vol.Required(CONF_PASSWORD): str,
@@ -116,8 +116,8 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     username=user_input[CONF_USERNAME],
                     password=user_input[CONF_PASSWORD],
                     loop=self.hass.loop,
-                    websession=async_get_clientsession(self.hass),
                     device_type=device_type,
+                    websession=async_get_clientsession(self.hass),
                 )
 
         # Try to attempt a connection
