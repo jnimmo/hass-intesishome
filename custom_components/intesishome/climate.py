@@ -63,10 +63,14 @@ class SwingSettings(NamedTuple):
 
 MAP_IH_TO_HVAC_MODE = {
     "auto": HVACMode.HEAT_COOL,
+    "auto+tank": HVACMode.HEAT_COOL,
     "cool": HVACMode.COOL,
+    "cool+tank": HVACMode.COOL,
     "dry": HVACMode.DRY,
     "fan": HVACMode.FAN_ONLY,
+    "tank": HVACMode.FAN_ONLY,
     "heat": HVACMode.HEAT,
+    "heat+tank": HVACMode.HEAT,
     "off": HVACMode.OFF,
 }
 MAP_HVAC_MODE_TO_IH = {v: k for k, v in MAP_IH_TO_HVAC_MODE.items()}
@@ -226,9 +230,17 @@ class IntesisAC(ClimateEntity):
 
         # Setup HVAC modes
         if modes := controller.get_mode_list(ih_device_id):
-            mode_list = [MAP_IH_TO_HVAC_MODE[mode] for mode in modes]
-            self._attr_hvac_modes.extend(mode_list)
+            mode_list = [
+                MAP_IH_TO_HVAC_MODE[mode]
+                for mode in modes
+                if MAP_IH_TO_HVAC_MODE.get(mode)
+            ]
+            self._attr_hvac_modes.extend(list(set(mode_list)))
         self._attr_hvac_modes.append(HVACMode.OFF)
+
+        # Add tank preset
+        if "tank" in controller.get_mode_list(ih_device_id):
+            self._preset_list.append("tank")
 
     async def async_added_to_hass(self):
         """Subscribe to event updates."""
@@ -318,7 +330,13 @@ class IntesisAC(ClimateEntity):
             await self._controller.set_power_on(self._device_id)
 
         # Set the mode
-        await self._controller.set_mode(self._device_id, MAP_HVAC_MODE_TO_IH[hvac_mode])
+        ih_mode = MAP_HVAC_MODE_TO_IH[hvac_mode]
+        if self._preset == "tank":
+            # If Aquarea device, also set the tank preset if needed
+            ih_mode += "+tank"
+            if ih_mode == "fan+tank":
+                ih_mode = "tank"
+        await self._controller.set_mode(self._device_id, ih_mode)
 
         # Send the temperature again in case changing modes has changed it
         if self._target_temp:
@@ -338,8 +356,12 @@ class IntesisAC(ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode):
         """Set preset mode."""
-        ih_preset_mode = MAP_PRESET_MODE_TO_IH.get(preset_mode)
-        await self._controller.set_preset_mode(self._device_id, ih_preset_mode)
+        if preset_mode == "tank":
+            await self.async_set_hvac_mode(self.hvac_mode)
+            self._preset = "tank"
+        else:
+            ih_preset_mode = MAP_PRESET_MODE_TO_IH.get(preset_mode)
+            await self._controller.set_preset_mode(self._device_id, ih_preset_mode)
 
     async def async_set_swing_mode(self, swing_mode):
         """Set the vertical vane."""
@@ -369,9 +391,14 @@ class IntesisAC(ClimateEntity):
         mode = self._controller.get_mode(self._device_id)
         self._hvac_mode = MAP_IH_TO_HVAC_MODE.get(mode)
 
-        # Preset mode
-        preset = self._controller.get_preset_mode(self._device_id)
-        self._preset = MAP_IH_TO_PRESET_MODE.get(preset)
+        # Preset mode (overwrite with tank preset if present)
+        if mode.endswith("tank"):
+            # Aquarea tank mode
+            self._preset = "tank"
+        else:
+            # Regular presets
+            preset = self._controller.get_preset_mode(self._device_id)
+            self._preset = MAP_IH_TO_PRESET_MODE.get(preset)
 
         # Swing mode
         # Climate module only supports one swing setting.
@@ -423,7 +450,7 @@ class IntesisAC(ClimateEntity):
                 DEVICE_AIRCONWITHME,
             ]:
                 # Add a random delay for cloud connections
-                reconnect_seconds = randrange(30, 600)
+                reconnect_seconds = randrange(30, 120)
 
             _LOGGER.info(
                 "Connection to %s API was lost. Reconnecting in %i seconds",
