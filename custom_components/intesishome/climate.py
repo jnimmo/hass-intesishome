@@ -256,7 +256,7 @@ class IntesisAC(ClimateEntity):
     def extra_state_attributes(self):
         """Return the device specific state attributes."""
         attrs = {}
-        if self._outdoor_temp:
+        if self._outdoor_temp is not None:
             attrs["outdoor_temp"] = self._outdoor_temp
         if self._power_consumption_heat:
             attrs["power_consumption_heat_kw"] = round(
