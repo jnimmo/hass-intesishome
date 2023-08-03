@@ -24,7 +24,7 @@ from pyintesishome.const import (
 
 from homeassistant import config_entries, core
 from homeassistant.components.climate import ClimateEntity
-from homeassistant.components.climate.const import (
+from homeassistant.components.climate import (
     ATTR_HVAC_MODE,
     PRESET_BOOST,
     PRESET_COMFORT,
@@ -42,12 +42,14 @@ from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_USERNAME,
-    TEMP_CELSIUS,
+    UnitOfTemperature,
 )
 from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+
 
 from . import DOMAIN
 
@@ -96,6 +98,9 @@ MAP_STATE_ICONS = {
     HVACMode.HEAT_COOL: "mdi:cached",
 }
 
+MAX_RETRIES = 10
+MAX_WAIT_TIME = 300
+
 
 async def async_setup_entry(
     hass: core.HomeAssistant,
@@ -119,7 +124,12 @@ async def async_setup_entry(
         await async_setup_platform(hass, config, async_add_entities)
 
 
-async def async_setup_platform(hass, config, async_add_entities):
+async def async_setup_platform(
+    hass: core.HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None
+) -> None:
     """Create the IntesisHome climate devices."""
     ih_user = config.get(CONF_USERNAME)
     ih_host = config.get(CONF_HOST)
@@ -172,7 +182,7 @@ async def async_setup_platform(hass, config, async_add_entities):
 class IntesisAC(ClimateEntity):
     """Represents an Intesishome air conditioning device."""
 
-    def __init__(self, ih_device_id, ih_device, controller):
+    def __init__(self, ih_device_id, ih_device, controller) -> None:
         """Initialize the thermostat."""
         self._controller: IntesisBase = controller
         self._device_id: str = ih_device_id
@@ -226,7 +236,12 @@ class IntesisAC(ClimateEntity):
 
         # Setup HVAC modes
         if modes := controller.get_mode_list(ih_device_id):
-            mode_list = [MAP_IH_TO_HVAC_MODE[mode] for mode in modes]
+            mode_list = []
+            for mode in modes:
+                if mode in MAP_IH_TO_HVAC_MODE:
+                    mode_list.append(MAP_IH_TO_HVAC_MODE[mode])
+            else:
+                _LOGGER.warning("Unexpected mode: %s", mode)
             self._attr_hvac_modes.extend(mode_list)
         self._attr_hvac_modes.append(HVACMode.OFF)
 
@@ -250,7 +265,7 @@ class IntesisAC(ClimateEntity):
     @property
     def temperature_unit(self):
         """Intesishome API uses celsius on the backend."""
-        return TEMP_CELSIUS
+        return UnitOfTemperature.CELSIUS
 
     @property
     def extra_state_attributes(self):
@@ -431,11 +446,27 @@ class IntesisAC(ClimateEntity):
                 reconnect_seconds,
             )
 
-            # Schedule reconnection
-            async def try_connect(_now):
-                await self._controller.connect()
+            async def try_connect(retries):
+                try:
+                    await self._controller.connect()
+                    _LOGGER.info("Reconnected to %s API", self._device_type)
+                except IHConnectionError:
+                    if retries < MAX_RETRIES:
+                        wait_time = min(2**retries, MAX_WAIT_TIME)
+                        _LOGGER.info(
+                            "Failed to reconnect to %s API. Retrying in %i seconds",
+                            self._device_type,
+                            wait_time,
+                        )
+                        async_call_later(self.hass, wait_time, try_connect(retries + 1))
+                    else:
+                        _LOGGER.error(
+                            "Failed to reconnect to %s API after %i retries. Giving up",
+                            self._device_type,
+                            MAX_RETRIES,
+                        )
 
-            async_call_later(self.hass, reconnect_seconds, try_connect)
+                async_call_later(self.hass, reconnect_seconds, try_connect(0))
 
         if self._controller.is_connected and not self._connected:
             # Connection has been restored
