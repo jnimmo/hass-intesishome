@@ -240,8 +240,8 @@ class IntesisAC(ClimateEntity):
             for mode in modes:
                 if mode in MAP_IH_TO_HVAC_MODE:
                     mode_list.append(MAP_IH_TO_HVAC_MODE[mode])
-            else:
-                _LOGGER.warning("Unexpected mode: %s", mode)
+                else:
+                    _LOGGER.warning("Unexpected mode: %s", mode)
             self._attr_hvac_modes.extend(mode_list)
         self._attr_hvac_modes.append(HVACMode.OFF)
 
