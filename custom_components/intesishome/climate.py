@@ -167,7 +167,7 @@ async def async_setup_platform(
                 IntesisAC(ih_device_id, device, controller)
                 for ih_device_id, device in ih_devices.items()
             ],
-            update_before_add=True,
+            update_before_add=False,
         )
     else:
         _LOGGER.error(
