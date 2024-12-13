@@ -182,6 +182,8 @@ async def async_setup_platform(
 class IntesisAC(ClimateEntity):
     """Represents an Intesishome air conditioning device."""
 
+    _enable_turn_on_off_backwards_compatibility = False
+
     def __init__(self, ih_device_id, ih_device, controller) -> None:
         """Initialize the thermostat."""
         self._controller: IntesisBase = controller
@@ -210,6 +212,10 @@ class IntesisAC(ClimateEntity):
         self._attr_supported_features = 0
         self._power_consumption_heat = None
         self._power_consumption_cool = None
+
+        # On / off support
+        self._attr_supported_features |= ClimateEntityFeature.TURN_ON
+        self._attr_supported_features |= ClimateEntityFeature.TURN_OFF
 
         # Setpoint support
         if controller.has_setpoint_control(ih_device_id):
@@ -303,6 +309,24 @@ class IntesisAC(ClimateEntity):
     def preset_mode(self):
         """Return the current preset mode."""
         return self._preset
+    
+    async def async_turn_on(self) -> None:
+        """Turn device on."""
+        self._power = True
+        await self._controller.set_power_on(self._device_id)
+
+    async def async_turn_off(self) -> None:
+        """Turn device off."""
+        self._power = False
+        await self._controller.set_power_off(self._device_id)
+
+    async def async_toggle(self) -> None:
+        """Toggle device status."""
+        state = self._device.ac_status
+        if not self._controller.is_on(self._device_id):
+            await self.async_turn_on()
+        else:
+            await self.async_turn_off()
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
