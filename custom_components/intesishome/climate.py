@@ -322,7 +322,6 @@ class IntesisAC(ClimateEntity):
 
     async def async_toggle(self) -> None:
         """Toggle device status."""
-        state = self._device.ac_status
         if not self._controller.is_on(self._device_id):
             await self.async_turn_on()
         else:
