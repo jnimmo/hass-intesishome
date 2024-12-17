@@ -1,7 +1,3 @@
 {
     "name": "IntesisHome (Config flow)",
-    "domains": [
-        "climate"
-    ],
-    "render_readme": true
 }
