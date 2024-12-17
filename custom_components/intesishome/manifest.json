@@ -5,7 +5,8 @@
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/intesishome",
   "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/jnimmo/hass-intesishome/issues",
   "loggers": ["pyintesishome"],
   "requirements": ["pyintesishome==1.8.5"],
-  "version": "1.0.6"
+  "version": "1.0.9"
 }
