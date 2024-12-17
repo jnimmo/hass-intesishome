@@ -8,5 +8,5 @@
   "issue_tracker": "https://github.com/jnimmo/hass-intesishome/issues",
   "loggers": ["pyintesishome"],
   "requirements": ["pyintesishome==1.8.5"],
-  "version": "1.0.9"
+  "version": "1.1.0"
 }
