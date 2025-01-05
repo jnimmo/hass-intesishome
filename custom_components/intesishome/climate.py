@@ -218,10 +218,12 @@ class IntesisAC(ClimateEntity):
         # Setup swing list
         if controller.has_vertical_swing(ih_device_id):
             self._swing_list.append(SWING_VERTICAL)
+        if len(self._swing_list) > 1:
+            self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
         if controller.has_horizontal_swing(ih_device_id):
             self._swing_horizontal_list.append(SWING_HORIZONTAL)
-        if len(self._swing_list) > 1 or len(self._swing_horizontal_list):
-            self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
+        if len(self._swing_horizontal_list) > 1:
+            self._attr_supported_features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
 
         # Setup fan speeds
         self._fan_modes = controller.get_fan_speed_list(ih_device_id)
@@ -424,8 +426,10 @@ class IntesisAC(ClimateEntity):
                 self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
             if self._controller.has_setpoint_control(self._device_id):
                 self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE
-            if len(self._swing_list) > 1 or len(self._swing_horizontal_list):
+            if len(self._swing_list) > 1:
                 self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
+            if len(self._swing_horizontal_list) > 1:
+                self._attr_supported_features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
             if self._ih_device.get("climate_working_mode"):
                 self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
 
