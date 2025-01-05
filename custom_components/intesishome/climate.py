@@ -71,17 +71,31 @@ MAP_IH_TO_PRESET_MODE = {
 }
 MAP_PRESET_MODE_TO_IH = {v: k for k, v in MAP_IH_TO_PRESET_MODE.items()}
 
-IH_SWING_STOP = "auto/stop"
-IH_SWING_SWING = "swing"
-
 MAP_SWING_TO_IH = {
-    SWING_OFF: IH_SWING_STOP,
-    SWING_VERTICAL: IH_SWING_SWING,
+    SWING_OFF: "auto/stop",
+    "Swing": "swing",
+    "Position1": "manual1",
+    "Position2": "manual2", 
+    "Position3": "manual3",
+    "Position4": "manual4",
+    "Position5": "manual5",
+    "Position6": "manual6",
+    "Position7": "manual7",
+    "Position8": "manual8",
+    "Position9": "manual9",
 }
+MAP_IH_TO_SWING = {v: k for k, v in MAP_SWING_TO_IH.items()}
+
 MAP_HORIZONTAL_SWING_TO_IH = {
-    SWING_OFF: IH_SWING_STOP,
-    SWING_HORIZONTAL: IH_SWING_SWING,
+    SWING_OFF: "auto/stop",
+    "Swing": "swing",
+    "Position1": "manual1",
+    "Position2": "manual2", 
+    "Position3": "manual3",
+    "Position4": "manual4",
+    "Position5": "manual5"
 }
+MAP_IH_TO_HORIZONTAL_SWING = {v: k for k, v in MAP_HORIZONTAL_SWING_TO_IH.items()}
 
 MAP_STATE_ICONS = {
     HVACMode.COOL: "mdi:snowflake",
@@ -197,8 +211,8 @@ class IntesisAC(ClimateEntity):
         self._preset_list: list[str] = [PRESET_ECO, PRESET_COMFORT, PRESET_BOOST]
         self._run_hours: int = None
         self._rssi = None
-        self._swing_list: list[str] = [SWING_OFF]
-        self._swing_horizontal_list: list[str] = [SWING_OFF]
+        self._swing_list: list[str] = []
+        self._swing_horizontal_list: list[str] = []
         self._vvane: str = None
         self._hvane: str = None
         self._power: bool = False
@@ -217,12 +231,21 @@ class IntesisAC(ClimateEntity):
 
         # Setup swing list
         if controller.has_vertical_swing(ih_device_id):
-            self._swing_list.append(SWING_VERTICAL)
-        if len(self._swing_list) > 1:
-            self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
+            self._swing_list.extend([
+                "Swing",
+                "Position1",
+                "Position2",
+                "Position3", 
+                "Position4"
+            ])
         if controller.has_horizontal_swing(ih_device_id):
-            self._swing_horizontal_list.append(SWING_HORIZONTAL)
-        if len(self._swing_horizontal_list) > 1:
+            self._swing_horizontal_list.extend([
+                SWING_OFF,
+                SWING_HORIZONTAL
+            ])
+        if len(self._swing_list) > 0:
+            self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
+        if len(self._swing_horizontal_list) > 0:
             self._attr_supported_features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
 
         # Setup fan speeds
@@ -426,9 +449,9 @@ class IntesisAC(ClimateEntity):
                 self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
             if self._controller.has_setpoint_control(self._device_id):
                 self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE
-            if len(self._swing_list) > 1:
+            if len(self._swing_list) > 0:
                 self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
-            if len(self._swing_horizontal_list) > 1:
+            if len(self._swing_horizontal_list) > 0:
                 self._attr_supported_features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
             if self._ih_device.get("climate_working_mode"):
                 self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
@@ -521,21 +544,27 @@ class IntesisAC(ClimateEntity):
 
     @property
     def swing_mode(self):
-        """Return current vertical swing mode."""
-        if self._vvane == IH_SWING_SWING:
-            swing = SWING_VERTICAL
-        else:
-            swing = SWING_OFF
-        return swing
+        if self._vvane is None:
+            return None
+        swing = MAP_IH_TO_SWING.get(self._vvane)
+        if swing is None:
+            return None
+        try:
+            return swing
+        except ValueError:
+            return None
     
     @property
     def swing_horizontal_mode(self):
-        """Return current horizontal swing mode."""
-        if self._hvane == IH_SWING_SWING:
-            swing = SWING_HORIZONTAL
-        else:
-            swing = SWING_OFF
-        return swing
+        if self._vvane is None:
+            return None
+        swing = MAP_IH_TO_SWING.get(self._hvane)
+        if swing is None:
+            return None
+        try:
+            return swing
+        except ValueError:
+            return None
 
     @property
     def fan_modes(self):
