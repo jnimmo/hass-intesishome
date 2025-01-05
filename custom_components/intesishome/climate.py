@@ -29,9 +29,7 @@ from homeassistant.components.climate import (
     PRESET_BOOST,
     PRESET_COMFORT,
     PRESET_ECO,
-    SWING_HORIZONTAL,
     SWING_OFF,
-    SWING_VERTICAL,
     ClimateEntityFeature,
     HVACMode,
 )
@@ -229,20 +227,43 @@ class IntesisAC(ClimateEntity):
         if controller.has_setpoint_control(ih_device_id):
             self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE
 
-        # Setup swing list
+        # Setup swing lists
         if controller.has_vertical_swing(ih_device_id):
-            self._swing_list.extend([
-                "Swing",
-                "Position1",
-                "Position2",
-                "Position3", 
-                "Position4"
-            ])
+            if hasattr(controller, "get_vertical_swing_list"):
+                if swingmodes := controller.get_vertical_swing_list(ih_device_id):
+                    swingmode_list = []
+                    for swingmode in swingmodes:
+                        if swingmode in MAP_IH_TO_SWING:
+                            swingmode_list.append(MAP_IH_TO_SWING[swingmode])
+                        else:
+                            _LOGGER.warning("Unexpected swingmode: %s", swingmode)
+                    self._swing_list.extend(swingmode_list)
+            else:
+                self._swing_list.extend([
+                    "Swing",
+                    "Position1",
+                    "Position2",
+                    "Position3", 
+                    "Position4"
+                ])
         if controller.has_horizontal_swing(ih_device_id):
-            self._swing_horizontal_list.extend([
-                SWING_OFF,
-                SWING_HORIZONTAL
-            ])
+            if hasattr(controller, "get_horizontal_swing_list"):
+                if swingmodes := controller.get_horizontal_swing_list(ih_device_id):
+                    swingmode_list = []
+                    for swingmode in swingmodes:
+                        if swingmode in MAP_IH_TO_SWING:
+                            swingmode_list.append(MAP_IH_TO_HORIZONTAL_SWING[swingmode])
+                        else:
+                            _LOGGER.warning("Unexpected swingmode: %s", swingmode)
+                    self._swing_horizontal_list.extend(swingmode_list)
+            else:
+                self._swing_list.extend([
+                    "Swing",
+                    "Position1",
+                    "Position2",
+                    "Position3", 
+                    "Position4"
+                ])
         if len(self._swing_list) > 0:
             self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
         if len(self._swing_horizontal_list) > 0:
