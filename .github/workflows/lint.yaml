@@ -3,23 +3,13 @@ name: Lint
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
-  pre-commit:
-    runs-on: ubuntu-latest
+  validate-hacs:
+    runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v3
-      - uses: pre-commit/action@v3.0.0
-
-  validate_hacs:
-    name: "HACS Validation"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: "actions/checkout@v3"
-      - name: HACS Action
+      - name: HACS validation
         uses: "hacs/action@main"
         with:
           category: "integration"
-          ignore: "brands topics"
