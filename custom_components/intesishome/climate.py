@@ -589,6 +589,6 @@ class IntesisAC(ClimateEntity):
                 (DOMAIN, self._controller.controller_id, self._device_id) 
             },
             name=self._device_name,
-            manufacturer=self._device_type,
+            manufacturer=self._device_type.capitalize(),
             model=controller_model
         )
