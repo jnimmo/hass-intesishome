@@ -48,6 +48,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.entity import DeviceInfo
 
 
 from . import DOMAIN
@@ -111,7 +112,7 @@ async def async_setup_entry(
                     IntesisAC(ih_device_id, device, controller)
                     for ih_device_id, device in ih_devices.items()
                 ],
-                update_before_add=True,
+                update_before_add=False,
             )
     else:
         await async_setup_platform(hass, config, async_add_entities)
@@ -575,3 +576,23 @@ class IntesisAC(ClimateEntity):
         if self._power and self.hvac_mode not in [HVACMode.FAN_ONLY, HVACMode.OFF]:
             return self._target_temp
         return None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        controller_model = None
+        controller_fw_version = None
+        if hasattr(self._controller, "get_model"):
+            controller_model = self._controller.get_model(self._device_id)
+        if hasattr(self._controller, "get_fw_version"):
+            controller_fw_version = self._controller.get_fw_version(self._device_id)
+        return DeviceInfo(
+            identifiers={
+                # Serial numbers are unique identifiers within a specific domain
+                (DOMAIN, self._controller.controller_id, self._device_id) 
+            },
+            name=self._device_name,
+            manufacturer=self._device_type.capitalize(),
+            model=controller_model,
+            sw_version=controller_fw_version
+        )
