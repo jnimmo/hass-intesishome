@@ -3,24 +3,8 @@
 from __future__ import annotations
 
 import logging
-from random import randrange
-from typing import NamedTuple
 
-from pyintesishome import (
-    IHAuthenticationError,
-    IHConnectionError,
-    IntesisBase,
-    IntesisBox,
-    IntesisHome,
-    IntesisHomeLocal,
-)
-from pyintesishome.const import (
-    DEVICE_AIRCONWITHME,
-    DEVICE_ANYWAIR,
-    DEVICE_INTESISBOX,
-    DEVICE_INTESISHOME,
-    DEVICE_INTESISHOME_LOCAL,
-)
+from pyintesishome import IntesisBase
 
 from homeassistant import config_entries, core
 from homeassistant.components.climate import ClimateEntity
@@ -35,20 +19,9 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.const import (
-    ATTR_TEMPERATURE,
-    CONF_DEVICE,
-    CONF_HOST,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    UnitOfTemperature,
-)
-from homeassistant.exceptions import PlatformNotReady
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_call_later
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-
 
 from . import DOMAIN
 
@@ -91,84 +64,25 @@ MAP_STATE_ICONS = {
     HVACMode.HEAT_COOL: "mdi:cached",
 }
 
-MAX_RETRIES = 10
-MAX_WAIT_TIME = 300
-
-
 async def async_setup_entry(
     hass: core.HomeAssistant,
     config_entry: config_entries.ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create climate entities from config flow."""
-    config = config_entry.data
-    if "controller" in hass.data[DOMAIN]:
-        controller = hass.data[DOMAIN]["controller"].pop(config_entry.unique_id)
-        ih_devices = controller.get_devices()
-        if ih_devices:
-            async_add_entities(
-                [
-                    IntesisAC(ih_device_id, device, controller)
-                    for ih_device_id, device in ih_devices.items()
-                ],
-                update_before_add=True,
-            )
-    else:
-        await async_setup_platform(hass, config, async_add_entities)
+    """Create climate entities from config flow.
 
-
-async def async_setup_platform(
-    hass: core.HomeAssistant,
-    config: ConfigType,
-    async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None
-) -> None:
-    """Create the IntesisHome climate devices."""
-    ih_user = config.get(CONF_USERNAME)
-    ih_host = config.get(CONF_HOST)
-    ih_pass = config.get(CONF_PASSWORD)
-    device_type = config.get(CONF_DEVICE)
-    websession = async_get_clientsession(hass)
-
-    if device_type == DEVICE_INTESISBOX:
-        controller = IntesisBox(config[CONF_HOST], loop=hass.loop)
-        await controller.connect()
-    elif device_type == DEVICE_INTESISHOME_LOCAL:
-        controller = IntesisHomeLocal(
-            ih_host, ih_user, ih_pass, loop=hass.loop, websession=websession
-        )
-    else:
-        controller = IntesisHome(
-            ih_user,
-            ih_pass,
-            hass.loop,
-            websession=async_get_clientsession(hass),
-            device_type=device_type,
-        )
-    try:
-        await controller.poll_status()
-    except IHAuthenticationError:
-        _LOGGER.error("Invalid username or password")
-        return
-    except IHConnectionError as ex:
-        _LOGGER.error("Error connecting to the %s server", device_type)
-        raise PlatformNotReady from ex
-
-    if ih_devices := controller.get_devices():
-        async_add_entities(
-            [
-                IntesisAC(ih_device_id, device, controller)
-                for ih_device_id, device in ih_devices.items()
-            ],
-            update_before_add=False,
-        )
-    else:
-        _LOGGER.error(
-            "Error getting device list from %s API: %s",
-            device_type,
-            controller.error_message,
-        )
-        await controller.stop()
+    The controller is constructed in __init__.async_setup_entry and stored
+    on hass.data so every platform shares one TCP session.
+    """
+    controller: IntesisBase = hass.data[DOMAIN][config_entry.entry_id]["controller"]
+    ih_devices = controller.get_devices() or {}
+    async_add_entities(
+        [
+            IntesisAC(ih_device_id, device, controller)
+            for ih_device_id, device in ih_devices.items()
+        ],
+        update_before_add=True,
+    )
 
 
 # pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-public-methods
@@ -246,16 +160,14 @@ class IntesisAC(ClimateEntity):
         self._attr_hvac_modes.append(HVACMode.OFF)
 
     async def async_added_to_hass(self):
-        """Subscribe to event updates."""
+        """Subscribe to event updates.
+
+        The controller is already connected by the time the entity is
+        added (see __init__.async_setup_entry) so this only needs to
+        register the state-update callback.
+        """
         _LOGGER.debug("Added climate device with state: %s", repr(self._ih_device))
         self._controller.add_update_callback(self.async_update_callback)
-
-        if self._device_type is not DEVICE_INTESISBOX:
-            try:
-                await self._controller.connect()
-            except IHConnectionError as ex:
-                _LOGGER.error("Exception connecting to IntesisHome: %s", ex)
-                raise PlatformNotReady from ex
 
     @property
     def name(self):
@@ -449,49 +361,11 @@ class IntesisAC(ClimateEntity):
 
     async def async_update_callback(self, device_id=None):
         """Let HA know there has been an update from the controller."""
-        # Track changes in connection state
+        # Track connection-state transitions for logging.
         if self._controller and not self._controller.is_connected and self._connected:
-            # Connection has dropped
             self._connected = False
-            reconnect_seconds = 30
-            if self._device_type in [
-                DEVICE_INTESISHOME,
-                DEVICE_ANYWAIR,
-                DEVICE_AIRCONWITHME,
-            ]:
-                # Add a random delay for cloud connections
-                reconnect_seconds = randrange(30, 600)
-
-            _LOGGER.info(
-                "Connection to %s API was lost. Reconnecting in %i seconds",
-                self._device_type,
-                reconnect_seconds,
-            )
-
-            async def try_connect(retries):
-                try:
-                    await self._controller.connect()
-                    _LOGGER.info("Reconnected to %s API", self._device_type)
-                except IHConnectionError:
-                    if retries < MAX_RETRIES:
-                        wait_time = min(2**retries, MAX_WAIT_TIME)
-                        _LOGGER.info(
-                            "Failed to reconnect to %s API. Retrying in %i seconds",
-                            self._device_type,
-                            wait_time,
-                        )
-                        async_call_later(self.hass, wait_time, try_connect(retries + 1))
-                    else:
-                        _LOGGER.error(
-                            "Failed to reconnect to %s API after %i retries. Giving up",
-                            self._device_type,
-                            MAX_RETRIES,
-                        )
-
-                async_call_later(self.hass, reconnect_seconds, try_connect(0))
-
-        if self._controller.is_connected and not self._connected:
-            # Connection has been restored
+            _LOGGER.info("Connection to %s API was lost", self._device_type)
+        elif self._controller and self._controller.is_connected and not self._connected:
             self._connected = True
             _LOGGER.debug("Connection to %s API was restored", self._device_type)
 
