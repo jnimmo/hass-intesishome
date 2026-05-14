@@ -232,7 +232,7 @@ class IntesisAC(ClimateEntity):
         """Return the current preset mode."""
         return self._preset
     
-    async def _expect_ack(self, success: bool, description: str) -> None:
+    def _expect_ack(self, success: bool, description: str) -> None:
         """Raise HomeAssistantError when a controller SET returns False.
 
         The library's set_* methods return True when the cloud
@@ -248,13 +248,13 @@ class IntesisAC(ClimateEntity):
     async def async_turn_on(self) -> None:
         """Turn device on."""
         ok = await self._controller.set_power_on(self._device_id)
-        await self._expect_ack(ok, "power on")
+        self._expect_ack(ok, "power on")
         self._power = True
 
     async def async_turn_off(self) -> None:
         """Turn device off."""
         ok = await self._controller.set_power_off(self._device_id)
-        await self._expect_ack(ok, "power off")
+        self._expect_ack(ok, "power off")
         self._power = False
 
     async def async_toggle(self) -> None:
@@ -272,7 +272,7 @@ class IntesisAC(ClimateEntity):
         if temperature := kwargs.get(ATTR_TEMPERATURE):
             _LOGGER.debug("Setting %s to %s degrees", self._device_type, temperature)
             ok = await self._controller.set_temperature(self._device_id, temperature)
-            await self._expect_ack(ok, f"temperature {temperature}")
+            self._expect_ack(ok, f"temperature {temperature}")
             self._target_temp = temperature
 
         # Write updated temperature to HA state to avoid flapping (API confirmation is slow)
@@ -283,7 +283,7 @@ class IntesisAC(ClimateEntity):
         _LOGGER.debug("Setting %s to %s mode", self._device_type, hvac_mode)
         if hvac_mode == HVACMode.OFF:
             ok = await self._controller.set_power_off(self._device_id)
-            await self._expect_ack(ok, "power off")
+            self._expect_ack(ok, "power off")
             self._power = False
             # Write changes to HA, API can be slow to push changes
             self.async_write_ha_state()
@@ -292,14 +292,14 @@ class IntesisAC(ClimateEntity):
         # First check device is turned on
         if not self._controller.is_on(self._device_id):
             ok = await self._controller.set_power_on(self._device_id)
-            await self._expect_ack(ok, "power on")
+            self._expect_ack(ok, "power on")
             self._power = True
 
         # Set the mode
         ok = await self._controller.set_mode(
             self._device_id, MAP_HVAC_MODE_TO_IH[hvac_mode]
         )
-        await self._expect_ack(ok, f"HVAC mode {hvac_mode}")
+        self._expect_ack(ok, f"HVAC mode {hvac_mode}")
 
         # Send the temperature again in case changing modes has changed it.
         # Best-effort; a failure to re-apply isn't worth a user-facing
@@ -314,7 +314,7 @@ class IntesisAC(ClimateEntity):
     async def async_set_fan_mode(self, fan_mode):
         """Set fan mode (from quiet, low, medium, high, auto)."""
         ok = await self._controller.set_fan_speed(self._device_id, fan_mode)
-        await self._expect_ack(ok, f"fan mode {fan_mode!r}")
+        self._expect_ack(ok, f"fan mode {fan_mode!r}")
 
         # Updates can take longer than 2 seconds, so update locally
         self._fan_speed = fan_mode
@@ -324,7 +324,7 @@ class IntesisAC(ClimateEntity):
         """Set preset mode."""
         ih_preset_mode = MAP_PRESET_MODE_TO_IH.get(preset_mode)
         ok = await self._controller.set_preset_mode(self._device_id, ih_preset_mode)
-        await self._expect_ack(ok, f"preset mode {preset_mode!r}")
+        self._expect_ack(ok, f"preset mode {preset_mode!r}")
 
     async def async_set_swing_mode(self, swing_mode):
         """Set the vertical vane."""
@@ -332,7 +332,7 @@ class IntesisAC(ClimateEntity):
             ok = await self._controller.set_vertical_vane(
                 self._device_id, swingmode
             )
-            await self._expect_ack(ok, f"vertical vane {swing_mode!r}")
+            self._expect_ack(ok, f"vertical vane {swing_mode!r}")
 
     async def async_set_swing_horizontal_mode(self, swing_mode):
         """Set the horizontal vane."""
@@ -340,7 +340,7 @@ class IntesisAC(ClimateEntity):
             ok = await self._controller.set_horizontal_vane(
                 self._device_id, swingmode
             )
-            await self._expect_ack(ok, f"horizontal vane {swing_mode!r}")
+            self._expect_ack(ok, f"horizontal vane {swing_mode!r}")
 
     async def async_update(self):
         """Copy values from controller dictionary to climate device."""
@@ -389,10 +389,16 @@ class IntesisAC(ClimateEntity):
                 self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
 
     async def async_will_remove_from_hass(self):
-        """Shutdown the controller when the device is being removed."""
+        """Detach from the shared controller's update stream.
+
+        The controller's lifecycle is owned by the integration
+        (constructed in __init__.async_setup_entry, stopped in
+        async_unload_entry) so this entity must NOT call stop() here.
+        Doing so would tear down the shared controller when a single
+        entity is removed or disabled, and would also race the
+        integration-level stop on entry unload.
+        """
         self._controller.remove_update_callback(self.async_update_callback)
-        await self._controller.stop()
-        self._controller = None
 
     @property
     def icon(self):

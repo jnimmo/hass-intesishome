@@ -15,7 +15,6 @@ if _vendor_path.is_dir():
             del _sys.modules[_name]
 del _sys, _Path, _vendor_path
 
-import asyncio
 import logging
 
 from pyintesishome import (
