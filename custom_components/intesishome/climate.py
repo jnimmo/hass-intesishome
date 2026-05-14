@@ -42,31 +42,14 @@ MAP_IH_TO_PRESET_MODE = {
 }
 MAP_PRESET_MODE_TO_IH = {v: k for k, v in MAP_IH_TO_PRESET_MODE.items()}
 
-MAP_SWING_TO_IH = {
+_VANE_POSITIONS = {
     SWING_OFF: "auto/stop",
     "Swing": "swing",
-    "Position1": "manual1",
-    "Position2": "manual2", 
-    "Position3": "manual3",
-    "Position4": "manual4",
-    "Position5": "manual5",
-    "Position6": "manual6",
-    "Position7": "manual7",
-    "Position8": "manual8",
-    "Position9": "manual9",
+    **{f"Position{n}": f"manual{n}" for n in range(1, 10)},
 }
-MAP_IH_TO_SWING = {v: k for k, v in MAP_SWING_TO_IH.items()}
-
-MAP_HORIZONTAL_SWING_TO_IH = {
-    SWING_OFF: "auto/stop",
-    "Swing": "swing",
-    "Position1": "manual1",
-    "Position2": "manual2", 
-    "Position3": "manual3",
-    "Position4": "manual4",
-    "Position5": "manual5"
-}
-MAP_IH_TO_HORIZONTAL_SWING = {v: k for k, v in MAP_HORIZONTAL_SWING_TO_IH.items()}
+MAP_SWING_TO_IH = _VANE_POSITIONS
+MAP_HORIZONTAL_SWING_TO_IH = _VANE_POSITIONS
+MAP_IH_TO_SWING = {v: k for k, v in _VANE_POSITIONS.items()}
 
 MAP_STATE_ICONS = {
     HVACMode.COOL: "mdi:snowflake",
@@ -75,6 +58,23 @@ MAP_STATE_ICONS = {
     HVACMode.HEAT: "mdi:white-balance-sunny",
     HVACMode.HEAT_COOL: "mdi:cached",
 }
+
+
+def _swing_names_from_controller_list(ih_positions: list[str] | None) -> list[str]:
+    """Translate the controller's IH-name swing positions into HA names.
+
+    Unknown IH positions are logged at warning level and skipped.
+    """
+    if not ih_positions:
+        return []
+    names: list[str] = []
+    for ih in ih_positions:
+        ha = MAP_IH_TO_SWING.get(ih)
+        if ha is None:
+            _LOGGER.warning("Unexpected swingmode reported by device: %s", ih)
+            continue
+        names.append(ha)
+    return names
 
 async def async_setup_entry(
     hass: core.HomeAssistant,
@@ -141,46 +141,18 @@ class IntesisAC(ClimateEntity):
         if controller.has_setpoint_control(ih_device_id):
             self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE
 
-        # Setup swing lists
-        if controller.has_vertical_swing(ih_device_id):
-            if hasattr(controller, "get_vertical_swing_list"):
-                if swingmodes := controller.get_vertical_swing_list(ih_device_id):
-                    swingmode_list = []
-                    for swingmode in swingmodes:
-                        if swingmode in MAP_IH_TO_SWING:
-                            swingmode_list.append(MAP_IH_TO_SWING[swingmode])
-                        else:
-                            _LOGGER.warning("Unexpected swingmode: %s", swingmode)
-                    self._swing_list.extend(swingmode_list)
-            else:
-                self._swing_list.extend([
-                    "Swing",
-                    "Position1",
-                    "Position2",
-                    "Position3", 
-                    "Position4"
-                ])
-        if controller.has_horizontal_swing(ih_device_id):
-            if hasattr(controller, "get_horizontal_swing_list"):
-                if swingmodes := controller.get_horizontal_swing_list(ih_device_id):
-                    swingmode_list = []
-                    for swingmode in swingmodes:
-                        if swingmode in MAP_IH_TO_SWING:
-                            swingmode_list.append(MAP_IH_TO_HORIZONTAL_SWING[swingmode])
-                        else:
-                            _LOGGER.warning("Unexpected swingmode: %s", swingmode)
-                    self._swing_horizontal_list.extend(swingmode_list)
-            else:
-                self._swing_list.extend([
-                    "Swing",
-                    "Position1",
-                    "Position2",
-                    "Position3", 
-                    "Position4"
-                ])
-        if len(self._swing_list) > 0:
+        # Setup swing lists. Positions advertised by the device are
+        # translated to user-facing names via MAP_IH_TO_SWING; anything
+        # not in the map is logged and skipped.
+        self._swing_list = _swing_names_from_controller_list(
+            controller.get_vertical_swing_list(ih_device_id)
+        )
+        self._swing_horizontal_list = _swing_names_from_controller_list(
+            controller.get_horizontal_swing_list(ih_device_id)
+        )
+        if self._swing_list:
             self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
-        if len(self._swing_horizontal_list) > 0:
+        if self._swing_horizontal_list:
             self._attr_supported_features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
 
         # Setup fan speeds
@@ -439,27 +411,17 @@ class IntesisAC(ClimateEntity):
 
     @property
     def swing_mode(self):
+        """Return the current vertical vane position as an HA-facing name."""
         if self._vvane is None:
             return None
-        swing = MAP_IH_TO_SWING.get(self._vvane)
-        if swing is None:
-            return None
-        try:
-            return swing
-        except ValueError:
-            return None
-    
+        return MAP_IH_TO_SWING.get(self._vvane)
+
     @property
     def swing_horizontal_mode(self):
-        if self._vvane is None:
+        """Return the current horizontal vane position as an HA-facing name."""
+        if self._hvane is None:
             return None
-        swing = MAP_IH_TO_SWING.get(self._hvane)
-        if swing is None:
-            return None
-        try:
-            return swing
-        except ValueError:
-            return None
+        return MAP_IH_TO_SWING.get(self._hvane)
 
     @property
     def fan_modes(self):
