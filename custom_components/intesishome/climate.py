@@ -19,6 +19,7 @@ from homeassistant.components.climate import (
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DOMAIN
@@ -495,6 +496,19 @@ class IntesisAC(ClimateEntity):
         # Don't show temperature for FAN_ONLY mode (no temperature control)
         if self.hvac_mode == HVACMode.FAN_ONLY:
             return None
-        
+
         # Return setpoint for all other modes, even when off
         return self._target_temp
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        model = self._controller.get_model(self._device_id) if hasattr(self._controller, "get_model") else None
+        sw_version = self._controller.get_fw_version(self._device_id) if hasattr(self._controller, "get_fw_version") else None
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._controller.controller_id, self._device_id)},
+            name=self._device_name,
+            manufacturer=self._device_type.capitalize(),
+            model=model,
+            sw_version=sw_version,
+        )
