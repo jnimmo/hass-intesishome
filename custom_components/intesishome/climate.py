@@ -3,24 +3,8 @@
 from __future__ import annotations
 
 import logging
-from random import randrange
-from typing import NamedTuple
 
-from pyintesishome import (
-    IHAuthenticationError,
-    IHConnectionError,
-    IntesisBase,
-    IntesisBox,
-    IntesisHome,
-    IntesisHomeLocal,
-)
-from pyintesishome.const import (
-    DEVICE_AIRCONWITHME,
-    DEVICE_ANYWAIR,
-    DEVICE_INTESISBOX,
-    DEVICE_INTESISHOME,
-    DEVICE_INTESISHOME_LOCAL,
-)
+from pyintesishome import IntesisBase
 
 from homeassistant import config_entries, core
 from homeassistant.components.climate import ClimateEntity
@@ -29,26 +13,13 @@ from homeassistant.components.climate import (
     PRESET_BOOST,
     PRESET_COMFORT,
     PRESET_ECO,
-    SWING_HORIZONTAL,
     SWING_OFF,
-    SWING_VERTICAL,
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.const import (
-    ATTR_TEMPERATURE,
-    CONF_DEVICE,
-    CONF_HOST,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    UnitOfTemperature,
-)
-from homeassistant.exceptions import PlatformNotReady
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_call_later
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-
 
 from . import DOMAIN
 
@@ -71,17 +42,14 @@ MAP_IH_TO_PRESET_MODE = {
 }
 MAP_PRESET_MODE_TO_IH = {v: k for k, v in MAP_IH_TO_PRESET_MODE.items()}
 
-IH_SWING_STOP = "auto/stop"
-IH_SWING_SWING = "swing"
-
-MAP_SWING_TO_IH = {
-    SWING_OFF: IH_SWING_STOP,
-    SWING_VERTICAL: IH_SWING_SWING,
+_VANE_POSITIONS = {
+    SWING_OFF: "auto/stop",
+    "Swing": "swing",
+    **{f"Position{n}": f"manual{n}" for n in range(1, 10)},
 }
-MAP_HORIZONTAL_SWING_TO_IH = {
-    SWING_OFF: IH_SWING_STOP,
-    SWING_HORIZONTAL: IH_SWING_SWING,
-}
+MAP_SWING_TO_IH = _VANE_POSITIONS
+MAP_HORIZONTAL_SWING_TO_IH = _VANE_POSITIONS
+MAP_IH_TO_SWING = {v: k for k, v in _VANE_POSITIONS.items()}
 
 MAP_STATE_ICONS = {
     HVACMode.COOL: "mdi:snowflake",
@@ -91,84 +59,42 @@ MAP_STATE_ICONS = {
     HVACMode.HEAT_COOL: "mdi:cached",
 }
 
-MAX_RETRIES = 10
-MAX_WAIT_TIME = 300
 
+def _swing_names_from_controller_list(ih_positions: list[str] | None) -> list[str]:
+    """Translate the controller's IH-name swing positions into HA names.
+
+    Unknown IH positions are logged at warning level and skipped.
+    """
+    if not ih_positions:
+        return []
+    names: list[str] = []
+    for ih in ih_positions:
+        ha = MAP_IH_TO_SWING.get(ih)
+        if ha is None:
+            _LOGGER.warning("Unexpected swingmode reported by device: %s", ih)
+            continue
+        names.append(ha)
+    return names
 
 async def async_setup_entry(
     hass: core.HomeAssistant,
     config_entry: config_entries.ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create climate entities from config flow."""
-    config = config_entry.data
-    if "controller" in hass.data[DOMAIN]:
-        controller = hass.data[DOMAIN]["controller"].pop(config_entry.unique_id)
-        ih_devices = controller.get_devices()
-        if ih_devices:
-            async_add_entities(
-                [
-                    IntesisAC(ih_device_id, device, controller)
-                    for ih_device_id, device in ih_devices.items()
-                ],
-                update_before_add=True,
-            )
-    else:
-        await async_setup_platform(hass, config, async_add_entities)
+    """Create climate entities from config flow.
 
-
-async def async_setup_platform(
-    hass: core.HomeAssistant,
-    config: ConfigType,
-    async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None
-) -> None:
-    """Create the IntesisHome climate devices."""
-    ih_user = config.get(CONF_USERNAME)
-    ih_host = config.get(CONF_HOST)
-    ih_pass = config.get(CONF_PASSWORD)
-    device_type = config.get(CONF_DEVICE)
-    websession = async_get_clientsession(hass)
-
-    if device_type == DEVICE_INTESISBOX:
-        controller = IntesisBox(config[CONF_HOST], loop=hass.loop)
-        await controller.connect()
-    elif device_type == DEVICE_INTESISHOME_LOCAL:
-        controller = IntesisHomeLocal(
-            ih_host, ih_user, ih_pass, loop=hass.loop, websession=websession
-        )
-    else:
-        controller = IntesisHome(
-            ih_user,
-            ih_pass,
-            hass.loop,
-            websession=async_get_clientsession(hass),
-            device_type=device_type,
-        )
-    try:
-        await controller.poll_status()
-    except IHAuthenticationError:
-        _LOGGER.error("Invalid username or password")
-        return
-    except IHConnectionError as ex:
-        _LOGGER.error("Error connecting to the %s server", device_type)
-        raise PlatformNotReady from ex
-
-    if ih_devices := controller.get_devices():
-        async_add_entities(
-            [
-                IntesisAC(ih_device_id, device, controller)
-                for ih_device_id, device in ih_devices.items()
-            ],
-            update_before_add=False,
-        )
-    else:
-        _LOGGER.error(
-            "Error getting device list from %s API: %s",
-            device_type,
-            controller.error_message,
-        )
-        await controller.stop()
+    The controller is constructed in __init__.async_setup_entry and stored
+    on hass.data so every platform shares one TCP session.
+    """
+    controller: IntesisBase = hass.data[DOMAIN][config_entry.entry_id]["controller"]
+    ih_devices = controller.get_devices() or {}
+    async_add_entities(
+        [
+            IntesisAC(ih_device_id, device, controller)
+            for ih_device_id, device in ih_devices.items()
+        ],
+        update_before_add=True,
+    )
 
 
 # pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-public-methods
@@ -197,8 +123,8 @@ class IntesisAC(ClimateEntity):
         self._preset_list: list[str] = [PRESET_ECO, PRESET_COMFORT, PRESET_BOOST]
         self._run_hours: int = None
         self._rssi = None
-        self._swing_list: list[str] = [SWING_OFF]
-        self._swing_horizontal_list: list[str] = [SWING_OFF]
+        self._swing_list: list[str] = []
+        self._swing_horizontal_list: list[str] = []
         self._vvane: str = None
         self._hvane: str = None
         self._power: bool = False
@@ -215,14 +141,18 @@ class IntesisAC(ClimateEntity):
         if controller.has_setpoint_control(ih_device_id):
             self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE
 
-        # Setup swing list
-        if controller.has_vertical_swing(ih_device_id):
-            self._swing_list.append(SWING_VERTICAL)
-        if len(self._swing_list) > 1:
+        # Setup swing lists. Positions advertised by the device are
+        # translated to user-facing names via MAP_IH_TO_SWING; anything
+        # not in the map is logged and skipped.
+        self._swing_list = _swing_names_from_controller_list(
+            controller.get_vertical_swing_list(ih_device_id)
+        )
+        self._swing_horizontal_list = _swing_names_from_controller_list(
+            controller.get_horizontal_swing_list(ih_device_id)
+        )
+        if self._swing_list:
             self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
-        if controller.has_horizontal_swing(ih_device_id):
-            self._swing_horizontal_list.append(SWING_HORIZONTAL)
-        if len(self._swing_horizontal_list) > 1:
+        if self._swing_horizontal_list:
             self._attr_supported_features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
 
         # Setup fan speeds
@@ -246,16 +176,14 @@ class IntesisAC(ClimateEntity):
         self._attr_hvac_modes.append(HVACMode.OFF)
 
     async def async_added_to_hass(self):
-        """Subscribe to event updates."""
+        """Subscribe to event updates.
+
+        The controller is already connected by the time the entity is
+        added (see __init__.async_setup_entry) so this only needs to
+        register the state-update callback.
+        """
         _LOGGER.debug("Added climate device with state: %s", repr(self._ih_device))
         self._controller.add_update_callback(self.async_update_callback)
-
-        if self._device_type is not DEVICE_INTESISBOX:
-            try:
-                await self._controller.connect()
-            except IHConnectionError as ex:
-                _LOGGER.error("Exception connecting to IntesisHome: %s", ex)
-                raise PlatformNotReady from ex
 
     @property
     def name(self):
@@ -304,15 +232,30 @@ class IntesisAC(ClimateEntity):
         """Return the current preset mode."""
         return self._preset
     
+    def _expect_ack(self, success: bool, description: str) -> None:
+        """Raise HomeAssistantError when a controller SET returns False.
+
+        The library's set_* methods return True when the cloud
+        acknowledges the command and False on timeout or invalid input.
+        Surface that as a service-call error so the user sees a
+        notification instead of a silently-dropped change.
+        """
+        if not success:
+            raise HomeAssistantError(
+                f"IntesisHome did not acknowledge {description}"
+            )
+
     async def async_turn_on(self) -> None:
         """Turn device on."""
+        ok = await self._controller.set_power_on(self._device_id)
+        self._expect_ack(ok, "power on")
         self._power = True
-        await self._controller.set_power_on(self._device_id)
 
     async def async_turn_off(self) -> None:
         """Turn device off."""
+        ok = await self._controller.set_power_off(self._device_id)
+        self._expect_ack(ok, "power off")
         self._power = False
-        await self._controller.set_power_off(self._device_id)
 
     async def async_toggle(self) -> None:
         """Toggle device status."""
@@ -328,7 +271,8 @@ class IntesisAC(ClimateEntity):
 
         if temperature := kwargs.get(ATTR_TEMPERATURE):
             _LOGGER.debug("Setting %s to %s degrees", self._device_type, temperature)
-            await self._controller.set_temperature(self._device_id, temperature)
+            ok = await self._controller.set_temperature(self._device_id, temperature)
+            self._expect_ack(ok, f"temperature {temperature}")
             self._target_temp = temperature
 
         # Write updated temperature to HA state to avoid flapping (API confirmation is slow)
@@ -338,21 +282,28 @@ class IntesisAC(ClimateEntity):
         """Set operation mode."""
         _LOGGER.debug("Setting %s to %s mode", self._device_type, hvac_mode)
         if hvac_mode == HVACMode.OFF:
+            ok = await self._controller.set_power_off(self._device_id)
+            self._expect_ack(ok, "power off")
             self._power = False
-            await self._controller.set_power_off(self._device_id)
             # Write changes to HA, API can be slow to push changes
             self.async_write_ha_state()
             return
 
         # First check device is turned on
         if not self._controller.is_on(self._device_id):
+            ok = await self._controller.set_power_on(self._device_id)
+            self._expect_ack(ok, "power on")
             self._power = True
-            await self._controller.set_power_on(self._device_id)
 
         # Set the mode
-        await self._controller.set_mode(self._device_id, MAP_HVAC_MODE_TO_IH[hvac_mode])
+        ok = await self._controller.set_mode(
+            self._device_id, MAP_HVAC_MODE_TO_IH[hvac_mode]
+        )
+        self._expect_ack(ok, f"HVAC mode {hvac_mode}")
 
-        # Send the temperature again in case changing modes has changed it
+        # Send the temperature again in case changing modes has changed it.
+        # Best-effort; a failure to re-apply isn't worth a user-facing
+        # error since the explicit hvac-mode change already landed.
         if self._target_temp:
             await self._controller.set_temperature(self._device_id, self._target_temp)
 
@@ -362,7 +313,8 @@ class IntesisAC(ClimateEntity):
 
     async def async_set_fan_mode(self, fan_mode):
         """Set fan mode (from quiet, low, medium, high, auto)."""
-        await self._controller.set_fan_speed(self._device_id, fan_mode)
+        ok = await self._controller.set_fan_speed(self._device_id, fan_mode)
+        self._expect_ack(ok, f"fan mode {fan_mode!r}")
 
         # Updates can take longer than 2 seconds, so update locally
         self._fan_speed = fan_mode
@@ -371,21 +323,24 @@ class IntesisAC(ClimateEntity):
     async def async_set_preset_mode(self, preset_mode):
         """Set preset mode."""
         ih_preset_mode = MAP_PRESET_MODE_TO_IH.get(preset_mode)
-        await self._controller.set_preset_mode(self._device_id, ih_preset_mode)
+        ok = await self._controller.set_preset_mode(self._device_id, ih_preset_mode)
+        self._expect_ack(ok, f"preset mode {preset_mode!r}")
 
     async def async_set_swing_mode(self, swing_mode):
         """Set the vertical vane."""
         if swingmode := MAP_SWING_TO_IH.get(swing_mode):
-            await self._controller.set_vertical_vane(
+            ok = await self._controller.set_vertical_vane(
                 self._device_id, swingmode
             )
+            self._expect_ack(ok, f"vertical vane {swing_mode!r}")
 
     async def async_set_swing_horizontal_mode(self, swing_mode):
         """Set the horizontal vane."""
-        if swingmode := MAP_HORIZONTAL_SWING_TO_IH.get(swing_mode):
-            await self._controller.set_horizontal_vane(
+        if swingmode := MAP_SWING_TO_IH.get(swing_mode):
+            ok = await self._controller.set_horizontal_vane(
                 self._device_id, swingmode
             )
+            self._expect_ack(ok, f"horizontal vane {swing_mode!r}")
 
     async def async_update(self):
         """Copy values from controller dictionary to climate device."""
@@ -426,18 +381,24 @@ class IntesisAC(ClimateEntity):
                 self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
             if self._controller.has_setpoint_control(self._device_id):
                 self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE
-            if len(self._swing_list) > 1:
+            if len(self._swing_list) > 0:
                 self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
-            if len(self._swing_horizontal_list) > 1:
+            if len(self._swing_horizontal_list) > 0:
                 self._attr_supported_features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
             if self._ih_device.get("climate_working_mode"):
                 self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
 
     async def async_will_remove_from_hass(self):
-        """Shutdown the controller when the device is being removed."""
+        """Detach from the shared controller's update stream.
+
+        The controller's lifecycle is owned by the integration
+        (constructed in __init__.async_setup_entry, stopped in
+        async_unload_entry) so this entity must NOT call stop() here.
+        Doing so would tear down the shared controller when a single
+        entity is removed or disabled, and would also race the
+        integration-level stop on entry unload.
+        """
         self._controller.remove_update_callback(self.async_update_callback)
-        await self._controller.stop()
-        self._controller = None
 
     @property
     def icon(self):
@@ -449,49 +410,11 @@ class IntesisAC(ClimateEntity):
 
     async def async_update_callback(self, device_id=None):
         """Let HA know there has been an update from the controller."""
-        # Track changes in connection state
+        # Track connection-state transitions for logging.
         if self._controller and not self._controller.is_connected and self._connected:
-            # Connection has dropped
             self._connected = False
-            reconnect_seconds = 30
-            if self._device_type in [
-                DEVICE_INTESISHOME,
-                DEVICE_ANYWAIR,
-                DEVICE_AIRCONWITHME,
-            ]:
-                # Add a random delay for cloud connections
-                reconnect_seconds = randrange(30, 600)
-
-            _LOGGER.info(
-                "Connection to %s API was lost. Reconnecting in %i seconds",
-                self._device_type,
-                reconnect_seconds,
-            )
-
-            async def try_connect(retries):
-                try:
-                    await self._controller.connect()
-                    _LOGGER.info("Reconnected to %s API", self._device_type)
-                except IHConnectionError:
-                    if retries < MAX_RETRIES:
-                        wait_time = min(2**retries, MAX_WAIT_TIME)
-                        _LOGGER.info(
-                            "Failed to reconnect to %s API. Retrying in %i seconds",
-                            self._device_type,
-                            wait_time,
-                        )
-                        async_call_later(self.hass, wait_time, try_connect(retries + 1))
-                    else:
-                        _LOGGER.error(
-                            "Failed to reconnect to %s API after %i retries. Giving up",
-                            self._device_type,
-                            MAX_RETRIES,
-                        )
-
-                async_call_later(self.hass, reconnect_seconds, try_connect(0))
-
-        if self._controller.is_connected and not self._connected:
-            # Connection has been restored
+            _LOGGER.info("Connection to %s API was lost", self._device_type)
+        elif self._controller and self._controller.is_connected and not self._connected:
             self._connected = True
             _LOGGER.debug("Connection to %s API was restored", self._device_type)
 
@@ -521,21 +444,17 @@ class IntesisAC(ClimateEntity):
 
     @property
     def swing_mode(self):
-        """Return current vertical swing mode."""
-        if self._vvane == IH_SWING_SWING:
-            swing = SWING_VERTICAL
-        else:
-            swing = SWING_OFF
-        return swing
-    
+        """Return the current vertical vane position as an HA-facing name."""
+        if self._vvane is None:
+            return None
+        return MAP_IH_TO_SWING.get(self._vvane)
+
     @property
     def swing_horizontal_mode(self):
-        """Return current horizontal swing mode."""
-        if self._hvane == IH_SWING_SWING:
-            swing = SWING_HORIZONTAL
-        else:
-            swing = SWING_OFF
-        return swing
+        """Return the current horizontal vane position as an HA-facing name."""
+        if self._hvane is None:
+            return None
+        return MAP_IH_TO_SWING.get(self._hvane)
 
     @property
     def fan_modes(self):
