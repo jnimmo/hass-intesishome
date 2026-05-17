@@ -3,7 +3,7 @@
   "name": "IntesisHome",
   "codeowners": ["@jnimmo"],
   "config_flow": true,
-  "documentation": "https://www.home-assistant.io/integrations/intesishome",
+  "documentation": "https://github.com/jnimmo/hass-intesishome",
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/jnimmo/hass-intesishome/issues",
   "loggers": ["pyintesishome"],
