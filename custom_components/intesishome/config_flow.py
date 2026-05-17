@@ -21,7 +21,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries, exceptions
 from homeassistant.const import CONF_DEVICE, CONF_HOST, CONF_PASSWORD, CONF_USERNAME
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from . import DOMAIN
@@ -38,7 +38,7 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize."""
         self._data = {}
 
-    async def async_step_user(self, user_input=None) -> FlowResult:
+    async def async_step_user(self, user_input=None) -> ConfigFlowResult:
         """Handle the initial device type selection step."""
         # unique_id = user_input["unique_id"]
         # await self.async_set_unique_id(unique_id)
@@ -68,7 +68,7 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=device_type_schema, errors=errors
         )
 
-    async def async_step_details(self, user_input=None) -> FlowResult:
+    async def async_step_details(self, user_input=None) -> ConfigFlowResult:
         """Handle the device connection step."""
         device_type = self._data.get(CONF_DEVICE)
         errors: dict[str, str] = {}
@@ -170,7 +170,7 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="details", data_schema=cloud_schema, errors=errors
         )
 
-    async def async_step_import(self, import_data) -> FlowResult:
+    async def async_step_import(self, import_data) -> ConfigFlowResult:
         """Handle configuration by yaml file."""
         return await self.async_step_user(import_data)
 
