@@ -435,7 +435,7 @@ class IntesisAC(ClimateEntity):
     @property
     def should_poll(self):
         """Poll for updates if pyIntesisHome doesn't have a socket open."""
-        return True
+        return False
 
     @property
     def fan_mode(self):
@@ -491,6 +491,10 @@ class IntesisAC(ClimateEntity):
     @property
     def target_temperature(self) -> float | None:
         """Return the current setpoint temperature if unit is on."""
-        if self._power and self.hvac_mode not in [HVACMode.FAN_ONLY, HVACMode.OFF]:
-            return self._target_temp
-        return None
+
+        # Don't show temperature for FAN_ONLY mode (no temperature control)
+        if self.hvac_mode == HVACMode.FAN_ONLY:
+            return None
+        
+        # Return setpoint for all other modes, even when off
+        return self._target_temp
