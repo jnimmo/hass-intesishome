@@ -29,8 +29,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-DOMAIN = "intesishome"
-PLATFORMS = ["climate"]
+from .const import DOMAIN, PLATFORMS
+
+# DOMAIN is re-exported here because climate.py (and any out-of-tree fork)
+# imports it as `from . import DOMAIN`.
+__all__ = ["DOMAIN", "PLATFORMS"]
 
 _LOGGER = logging.getLogger(__name__)
 
