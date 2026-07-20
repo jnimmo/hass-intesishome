@@ -17,11 +17,12 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.const import ATTR_TEMPERATURE, CONF_HOST, UnitOfTemperature
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DOMAIN
+from .const import DOMAIN
+from .entity import IntesisEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,11 +87,13 @@ async def async_setup_entry(
     The controller is constructed in __init__.async_setup_entry and stored
     on hass.data so every platform shares one TCP session.
     """
-    controller: IntesisBase = hass.data[DOMAIN][config_entry.entry_id]["controller"]
+    entry_data = hass.data[DOMAIN][config_entry.entry_id]
+    controller: IntesisBase = entry_data["controller"]
+    host: str | None = entry_data["config"].get(CONF_HOST)
     ih_devices = controller.get_devices() or {}
     async_add_entities(
         [
-            IntesisAC(ih_device_id, device, controller)
+            IntesisAC(ih_device_id, device, controller, host)
             for ih_device_id, device in ih_devices.items()
         ],
         update_before_add=True,
@@ -98,18 +101,19 @@ async def async_setup_entry(
 
 
 # pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-public-methods
-class IntesisAC(ClimateEntity):
+class IntesisAC(IntesisEntity, ClimateEntity):
     """Represents an Intesishome air conditioning device."""
 
     _enable_turn_on_off_backwards_compatibility = False
+    # The AC unit is the device's primary feature, so it carries the device's
+    # own name. This keeps friendly_name byte-identical to what it was before
+    # has_entity_name was adopted, so no existing install sees a rename.
+    _attr_name = None
 
-    def __init__(self, ih_device_id, ih_device, controller) -> None:
+    def __init__(self, ih_device_id, ih_device, controller, host=None) -> None:
         """Initialize the thermostat."""
-        self._controller: IntesisBase = controller
-        self._device_id: str = ih_device_id
-        self._ih_device: dict[str, dict[str, object]] = ih_device
-        self._device_name: str = ih_device.get("name")
-        self._device_type: str = controller.device_type
+        super().__init__(controller, ih_device_id, ih_device, host)
+        self._host: str | None = host
         self._connected: bool = False
         self._setpoint_step: float = 1.0
         self._current_temp: float = None
@@ -179,16 +183,11 @@ class IntesisAC(ClimateEntity):
         """Subscribe to event updates.
 
         The controller is already connected by the time the entity is
-        added (see __init__.async_setup_entry) so this only needs to
+        added (see __init__.async_setup_entry) so the base class only needs to
         register the state-update callback.
         """
         _LOGGER.debug("Added climate device with state: %s", repr(self._ih_device))
-        self._controller.add_update_callback(self.async_update_callback)
-
-    @property
-    def name(self):
-        """Return the name of the AC device."""
-        return self._device_name
+        await super().async_added_to_hass()
 
     @property
     def temperature_unit(self):
@@ -214,7 +213,13 @@ class IntesisAC(ClimateEntity):
 
     @property
     def unique_id(self):
-        """Return unique ID for this device."""
+        """Return unique ID for this device.
+
+        Deliberately the bare device_id, not a suffixed key like the sensor
+        entities use. This looks inconsistent but must not be "fixed":
+        changing it would orphan every existing user's climate entity, taking
+        its history and any automations referencing it with it.
+        """
         return self._device_id
 
     @property
@@ -388,18 +393,6 @@ class IntesisAC(ClimateEntity):
             if self._ih_device.get("climate_working_mode"):
                 self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
 
-    async def async_will_remove_from_hass(self):
-        """Detach from the shared controller's update stream.
-
-        The controller's lifecycle is owned by the integration
-        (constructed in __init__.async_setup_entry, stopped in
-        async_unload_entry) so this entity must NOT call stop() here.
-        Doing so would tear down the shared controller when a single
-        entity is removed or disabled, and would also race the
-        integration-level stop on entry unload.
-        """
-        self._controller.remove_update_callback(self.async_update_callback)
-
     @property
     def icon(self):
         """Return the icon for the current state."""
@@ -418,9 +411,7 @@ class IntesisAC(ClimateEntity):
             self._connected = True
             _LOGGER.debug("Connection to %s API was restored", self._device_type)
 
-        if not device_id or self._device_id == device_id:
-            # Update all devices if no device_id was specified
-            self.async_schedule_update_ha_state(True)
+        await super().async_update_callback(device_id)
 
     @property
     def min_temp(self):
@@ -431,11 +422,6 @@ class IntesisAC(ClimateEntity):
     def max_temp(self):
         """Return the maximum temperature for the current mode of operation."""
         return self._max_temp
-
-    @property
-    def should_poll(self):
-        """Poll for updates if pyIntesisHome doesn't have a socket open."""
-        return False
 
     @property
     def fan_mode(self):
@@ -495,6 +481,7 @@ class IntesisAC(ClimateEntity):
         # Don't show temperature for FAN_ONLY mode (no temperature control)
         if self.hvac_mode == HVACMode.FAN_ONLY:
             return None
-        
+
         # Return setpoint for all other modes, even when off
         return self._target_temp
+
