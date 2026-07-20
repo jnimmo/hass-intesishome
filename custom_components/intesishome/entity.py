@@ -67,6 +67,10 @@ def build_device_info(
         manufacturer=MANUFACTURER,
         model=controller.get_model(device_id),
         sw_version=controller.get_fw_version(device_id),
+        # For local gateways device_id is taken straight from the serial the
+        # device reports in getinfo, so this is the real serial rather than a
+        # synthesised one.
+        serial_number=str(device_id),
         configuration_url=configuration_url,
     )
 
