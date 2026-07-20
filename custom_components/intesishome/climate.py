@@ -17,12 +17,13 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.const import ATTR_TEMPERATURE, CONF_HOST, UnitOfTemperature
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DOMAIN
+from .const import DOMAIN
+from .entity import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,11 +88,13 @@ async def async_setup_entry(
     The controller is constructed in __init__.async_setup_entry and stored
     on hass.data so every platform shares one TCP session.
     """
-    controller: IntesisBase = hass.data[DOMAIN][config_entry.entry_id]["controller"]
+    entry_data = hass.data[DOMAIN][config_entry.entry_id]
+    controller: IntesisBase = entry_data["controller"]
+    host: str | None = entry_data["config"].get(CONF_HOST)
     ih_devices = controller.get_devices() or {}
     async_add_entities(
         [
-            IntesisAC(ih_device_id, device, controller)
+            IntesisAC(ih_device_id, device, controller, host)
             for ih_device_id, device in ih_devices.items()
         ],
         update_before_add=True,
@@ -104,13 +107,14 @@ class IntesisAC(ClimateEntity):
 
     _enable_turn_on_off_backwards_compatibility = False
 
-    def __init__(self, ih_device_id, ih_device, controller) -> None:
+    def __init__(self, ih_device_id, ih_device, controller, host=None) -> None:
         """Initialize the thermostat."""
         self._controller: IntesisBase = controller
         self._device_id: str = ih_device_id
         self._ih_device: dict[str, dict[str, object]] = ih_device
         self._device_name: str = ih_device.get("name")
         self._device_type: str = controller.device_type
+        self._host: str | None = host
         self._connected: bool = False
         self._setpoint_step: float = 1.0
         self._current_temp: float = None
@@ -502,13 +506,7 @@ class IntesisAC(ClimateEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return device info."""
-        model = self._controller.get_model(self._device_id) if hasattr(self._controller, "get_model") else None
-        sw_version = self._controller.get_fw_version(self._device_id) if hasattr(self._controller, "get_fw_version") else None
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._controller.controller_id, self._device_id)},
-            name=self._device_name,
-            manufacturer=self._device_type.capitalize(),
-            model=model,
-            sw_version=sw_version,
+        """Return device info shared with every other platform."""
+        return build_device_info(
+            self._controller, self._device_id, self._ih_device, self._host
         )
