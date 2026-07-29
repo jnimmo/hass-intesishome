@@ -24,7 +24,7 @@ from homeassistant.const import CONF_DEVICE, CONF_HOST, CONF_PASSWORD, CONF_USER
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from . import DOMAIN
+from . import DOMAIN, controller_identity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -132,7 +132,21 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 else:
                     await controller.poll_status()
 
-                if len(controller.get_devices()) == 0:
+                # As of pyintesishome 2.1.0 an unreachable device raises, so
+                # we only get here on a successful connection. controller_id
+                # still raises ValueError until the device has been identified
+                # though, so guard it rather than letting that surface as an
+                # "unknown error" - it covers an IntesisBox that connected
+                # without returning an ID, and a getinfo response with no
+                # serial number.
+                if not controller_identity(controller):
+                    _LOGGER.error(
+                        "No identity returned from %s - check the device is "
+                        "reachable and its local API is enabled",
+                        user_input.get(CONF_HOST, device_type),
+                    )
+                    errors["base"] = "cannot_connect"
+                elif len(controller.get_devices()) == 0:
                     errors["base"] = "no_devices"
                 else:
                     unique_id = (
