@@ -14,18 +14,18 @@ HA-facing layer over that library, not reimplement protocol logic.
 ## Validation / CI
 
 There is no local lint config (no `pyproject.toml` or `.pylintrc`). CI (`.github/workflows/`) runs
-three checks on every PR/push to `master`, all against GitHub-hosted actions rather than anything
+four checks on every PR/push to `master`, all against GitHub-hosted actions rather than anything
 invoked locally:
 
 - `hassfest.yaml` — validates `manifest.json` and integration structure against Home Assistant core's
   rules (`home-assistant/actions/hassfest`).
 - `lint.yaml` — HACS repository structure validation (`hacs/action`).
 - `claude.yml` — Claude Code Action, triggered by `@claude` mentions in issues/PR comments/reviews.
+- `test.yaml` — installs `requirements_test.txt` and runs `pytest tests/` on Python 3.13.
 
 There is a local `tests/` suite using `pytest-homeassistant-custom-component` (the downstream package
 that back-ports HA core's own test harness — `hass`, `MockConfigEntry`, `snapshot_platform`, etc. —
-for custom components). It is not currently wired into CI as a separate workflow; run it locally with
-a Python 3.13 venv:
+for custom components). Run it locally with a Python 3.13 venv:
 
 ```
 python3.13 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
