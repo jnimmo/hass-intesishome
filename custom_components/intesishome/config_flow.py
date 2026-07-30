@@ -1,6 +1,7 @@
 # pylint: disable=duplicate-code
 """Config flow for IntesisHome."""
 import logging
+from typing import Any, Mapping
 
 from pyintesishome import (
     IHAuthenticationError,
@@ -187,6 +188,75 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_import(self, import_data) -> ConfigFlowResult:
         """Handle configuration by yaml file."""
         return await self.async_step_user(import_data)
+
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Handle re-authentication after the cloud rejects stored credentials.
+
+        Home Assistant core schedules this automatically whenever
+        async_setup_entry raises ConfigEntryAuthFailed (see __init__.py) --
+        without it, that background task has no step to run and crashes with
+        UnknownStep, which is silent to the user (it just shows up as an
+        unretrieved task exception in the log) instead of prompting them to
+        fix their credentials.
+        """
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Prompt for new credentials and verify them before updating the entry."""
+        errors: dict[str, str] = {}
+        reauth_entry = self._get_reauth_entry()
+        device_type = reauth_entry.data[CONF_DEVICE]
+
+        if user_input is not None:
+            controller = IntesisHome(
+                username=user_input[CONF_USERNAME],
+                password=user_input[CONF_PASSWORD],
+                loop=self.hass.loop,
+                device_type=device_type,
+                websession=async_get_clientsession(self.hass),
+            )
+            if device_type == DEVICE_INTESISHOME_LOCAL:
+                controller = IntesisHomeLocal(
+                    reauth_entry.data[CONF_HOST],
+                    user_input[CONF_USERNAME],
+                    user_input[CONF_PASSWORD],
+                    loop=self.hass.loop,
+                    websession=async_get_clientsession(self.hass),
+                )
+
+            try:
+                await controller.poll_status()
+                if not controller_identity(controller):
+                    errors["base"] = "cannot_connect"
+                else:
+                    return self.async_update_reload_and_abort(
+                        reauth_entry,
+                        data={**reauth_entry.data, **user_input},
+                    )
+            except IHAuthenticationError:
+                errors["base"] = "invalid_auth"
+            except IHConnectionError:
+                errors["base"] = "cannot_connect"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            finally:
+                await controller.stop()
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_USERNAME): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
+            errors=errors,
+        )
 
 
 class CannotConnect(exceptions.HomeAssistantError):

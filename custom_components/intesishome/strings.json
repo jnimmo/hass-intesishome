@@ -18,6 +18,14 @@
           "username": "[%key:common::config_flow::data::username%]"
         },
         "title": "Connect to your IntesisHome account"
+      },
+      "reauth_confirm": {
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]",
+          "username": "[%key:common::config_flow::data::username%]"
+        },
+        "title": "Reauthenticate with IntesisHome",
+        "description": "Your IntesisHome credentials are no longer valid. Please re-enter them to reconnect."
       }
     },
     "error": {
