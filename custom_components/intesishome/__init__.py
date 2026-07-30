@@ -38,6 +38,22 @@ __all__ = ["DOMAIN", "PLATFORMS"]
 _LOGGER = logging.getLogger(__name__)
 
 
+def controller_identity(controller: IntesisBase) -> str | None:
+    """Return the controller's identity, or None if it was never set.
+
+    pyintesishome only populates the controller id once it has identified the
+    device, and raises ValueError from the property until then. Since
+    pyintesishome 2.1.0 an unreachable local device raises IHConnectionError
+    rather than returning without an id, so this covers the narrower cases: an
+    IntesisBox that connected without returning an ID, or a getinfo response
+    with no serial number.
+    """
+    try:
+        return controller.controller_id
+    except ValueError:
+        return None
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up IntesisHome from a config entry.
 
@@ -83,6 +99,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except IHConnectionError as exc:
         _LOGGER.error("Error connecting to the %s server: %s", device_type, exc)
         raise ConfigEntryNotReady from exc
+
+    # connect() raises on an unreachable device, so reaching here means the
+    # connection came up. An identity can still be missing if the device
+    # answered without one - setting up entities against that produces a
+    # permanently broken entry, so bail out and let HA retry instead.
+    # error_message is only ever populated by the cloud controller, so it is
+    # deliberately not logged here.
+    if not controller_identity(controller):
+        await controller.stop()
+        _LOGGER.error(
+            "%s at %s connected but returned no device identity",
+            device_type,
+            ih_host or ih_user,
+        )
+        raise ConfigEntryNotReady("Device did not return an identity")
 
     if not controller.get_devices():
         await controller.stop()
