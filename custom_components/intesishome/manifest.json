@@ -1,12 +1,14 @@
 {
   "domain": "intesishome",
   "name": "IntesisHome",
-  "codeowners": ["@jnimmo"],
+  "codeowners": [
+    "@jnimmo"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/jnimmo/hass-intesishome",
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/jnimmo/hass-intesishome/issues",
   "loggers": ["pyintesishome"],
   "requirements": ["pyintesishome==2.2.0"],
-  "version": "2.0.2-beta"
+  "version": "2.0.3-beta"
 }

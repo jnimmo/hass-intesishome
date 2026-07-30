@@ -58,10 +58,25 @@ Features supported depend on the physical device. The integration detects capabi
 | Horizontal swing    | Off, swing, or up to 9 discrete vane positions (device-dependent), controlled independently of vertical swing |
 | Preset modes        | Eco, comfort, boost (powerful)                                                                                |
 | Turn on / turn off  | Independent on/off without changing mode                                                                      |
-| Outdoor temperature | Exposed as `outdoor_temp` state attribute where supported                                                     |
+| Outdoor temperature | Exposed as a sensor entity, and as the `outdoor_temp` state attribute for backwards compatibility             |
 | Power consumption   | `power_consumption_heat_kw` and `power_consumption_cool_kw` state attributes where supported                  |
 
 If a command is not acknowledged by the device or cloud within 5 seconds, Home Assistant will display a visible error notification rather than silently dropping the change.
+
+### Sensors
+
+Each AC unit appears in Home Assistant as a **device**, grouping the climate entity together with the sensors below. The device page shows the model, firmware version and serial number, and links to the gateway's own web interface.
+
+| Entity                     | Type          | Notes                                                                       |
+| -------------------------- | ------------- | --------------------------------------------------------------------------- |
+| Outdoor temperature        | sensor        | Full history and long-term statistics, unlike the state attribute            |
+| Run hours                  | sensor        | Total compressor/unit run time reported by the device (diagnostic)           |
+| Error code                 | sensor        | Raw vendor error code (diagnostic, disabled by default)                      |
+| Signal strength            | sensor        | WiFi RSSI (diagnostic, disabled by default)                                  |
+| Problem                    | binary_sensor | On when the device reports an alarm (diagnostic)                             |
+| Connectivity               | binary_sensor | Whether the integration currently has a live session (diagnostic)            |
+
+These entities are only created when your device actually reports the underlying value, so you will not see permanently-unavailable entities for features your hardware does not have. Which ones appear varies by model — for example, WiFi signal strength is currently only reported over the cloud connection.
 
 ---
 

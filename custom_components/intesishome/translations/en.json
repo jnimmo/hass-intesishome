@@ -26,5 +26,29 @@
       "invalid_auth": "Invalid username or password.",
       "cannot_connect": "An error occurred connecting to the IntesisHome API."
     }
+  },
+  "entity": {
+    "sensor": {
+      "outdoor_temperature": {
+        "name": "Outdoor temperature"
+      },
+      "run_hours": {
+        "name": "Run hours"
+      },
+      "error_code": {
+        "name": "Error code"
+      },
+      "rssi": {
+        "name": "Signal strength"
+      }
+    },
+    "binary_sensor": {
+      "problem": {
+        "name": "Problem"
+      },
+      "connectivity": {
+        "name": "Connectivity"
+      }
+    }
   }
 }
