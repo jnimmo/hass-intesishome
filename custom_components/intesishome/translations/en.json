@@ -18,6 +18,14 @@
           "username": "Username"
         },
         "title": "Connect to your Intesis device"
+      },
+      "reauth_confirm": {
+        "data": {
+          "password": "Password",
+          "username": "Username"
+        },
+        "title": "Reauthenticate with IntesisHome",
+        "description": "Your IntesisHome credentials are no longer valid. Please re-enter them to reconnect."
       }
     },
     "error": {

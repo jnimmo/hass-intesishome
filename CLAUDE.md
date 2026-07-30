@@ -5,27 +5,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Home Assistant custom integration (HACS) for Intesis AC controllers. All code lives under
-`custom_components/intesishome/`. There is no Python package/build step, no local test suite, and
-no local lint config — this is a thin HA integration whose only "runtime" is Home Assistant itself.
-All real device-protocol logic (cloud TCP session, local HTTP API, IntesisBox WMP protocol) lives in
-the separate `pyintesishome` PyPI package, pinned in `manifest.json`'s `requirements`. This repo
-should stay a thin HA-facing layer over that library, not reimplement protocol logic.
+`custom_components/intesishome/`. There is no Python package/build step and no local lint config —
+this is a thin HA integration whose only "runtime" is Home Assistant itself. All real device-protocol
+logic (cloud TCP session, local HTTP API, IntesisBox WMP protocol) lives in the separate
+`pyintesishome` PyPI package, pinned in `manifest.json`'s `requirements`. This repo should stay a thin
+HA-facing layer over that library, not reimplement protocol logic.
 
 ## Validation / CI
 
-There is no pytest suite and no local lint command configured (no `pyproject.toml`, `.pylintrc`, or
-`requirements_test.txt`). CI (`.github/workflows/`) runs three checks on every PR/push to `master`,
-all against GitHub-hosted actions rather than anything invoked locally:
+There is no local lint config (no `pyproject.toml` or `.pylintrc`). CI (`.github/workflows/`) runs
+four checks on every PR/push to `master`, all against GitHub-hosted actions rather than anything
+invoked locally:
 
 - `hassfest.yaml` — validates `manifest.json` and integration structure against Home Assistant core's
   rules (`home-assistant/actions/hassfest`).
 - `lint.yaml` — HACS repository structure validation (`hacs/action`).
 - `claude.yml` — Claude Code Action, triggered by `@claude` mentions in issues/PR comments/reviews.
+- `test.yaml` — installs `requirements_test.txt` and runs `pytest tests/` on Python 3.13.
 
-Because there's no local harness, verifying a change generally means: reasoning carefully about the
-control flow (see below), and/or manually testing against a real device/account, as PR authors have
-done historically (see PR descriptions for hardware used). Don't invent test commands or a lint
-config that doesn't exist.
+There is a local `tests/` suite using `pytest-homeassistant-custom-component` (the downstream package
+that back-ports HA core's own test harness — `hass`, `MockConfigEntry`, `snapshot_platform`, etc. —
+for custom components). Run it locally with a Python 3.13 venv:
+
+```
+python3.13 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
+.venv/bin/python -m pytest tests/
+```
+
+`tests/conftest.py` mocks the controller by patching `custom_components.intesishome.IntesisHome` with
+`autospec=True` (the mock is checked against the real class's interface, so a typo'd or removed method
+name fails the test instead of silently returning a fresh `MagicMock`) and yields it — `yield` first,
+config *after* by mutating the yielded mock in each test, not inside the `with patch(...)` block
+before the yield. `tests/test_climate.py`'s `test_entities` uses the `snapshot_platform` helper to
+assert the full entity-registry entry and state in one snapshot rather than asserting each attribute
+by hand; targeted tests are reserved for behavior a snapshot can't express (service-call args via
+`assert_awaited_once_with`, `caplog` warnings, the `HomeAssistantError` raised by `_expect_ack`).
+
+For anything not covered by the suite, verifying a change still generally means: reasoning carefully
+about the control flow (see below), and/or manually testing against a real device/account, as PR
+authors have done historically (see PR descriptions for hardware used). Don't invent test commands or
+a lint config that doesn't exist.
 
 ## Architecture
 
