@@ -34,7 +34,7 @@ BUTTON_TYPES: tuple[IntesisButtonEntityDescription, ...] = (
         icon="mdi:filter-remove",
         required_property="filter_clean",
         press_fn=lambda controller, device_id: controller._set_value(
-            device_id, 183, 1
+            device_id, 184, 0
         ),
     ),
 )
