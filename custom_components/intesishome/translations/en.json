@@ -48,6 +48,9 @@
       },
       "rssi": {
         "name": "Signal strength"
+      },
+      "filter_due_hours": {
+        "name": "Filter due hours"
       }
     },
     "binary_sensor": {
@@ -56,6 +59,19 @@
       },
       "connectivity": {
         "name": "Connectivity"
+      },
+      "filter_clean": {
+        "name": "Filter clean required"
+      }
+    },
+    "button": {
+      "reset_filter": {
+        "name": "Reset filter"
+      }
+    },
+    "switch": {
+      "remote_controller_lock": {
+        "name": "Remote controller lock"
       }
     }
   }

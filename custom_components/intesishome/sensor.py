@@ -99,6 +99,19 @@ SENSOR_TYPES: tuple[IntesisSensorEntityDescription, ...] = (
         required_property="rssi",
         value_fn=lambda controller, device_id: controller.get_rssi(device_id),
     ),
+    IntesisSensorEntityDescription(
+        key="filter_due_hours",
+        translation_key="filter_due_hours",
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:filter-outline",
+        required_property="filter_due_hours",
+        value_fn=lambda controller, device_id: controller.get_device_property(
+            device_id, "filter_due_hours"
+        ),
+    ),
 )
 
 
