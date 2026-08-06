@@ -65,7 +65,7 @@ def build_device_info(
         # entity_id.
         name=ih_device.get("name") or f"Intesis {device_id}",
         manufacturer=MANUFACTURER,
-        model=controller.get_model(device_id),
+        model=str(model) if (model := controller.get_model(device_id)) is not None else None,
         sw_version=controller.get_fw_version(device_id),
         # For local gateways device_id is taken straight from the serial the
         # device reports in getinfo, so this is the real serial rather than a
