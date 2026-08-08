@@ -57,6 +57,17 @@ BINARY_SENSOR_TYPES: tuple[IntesisBinarySensorEntityDescription, ...] = (
         always_available=True,
         value_fn=lambda controller, device_id: controller.is_connected,
     ),
+    IntesisBinarySensorEntityDescription(
+        key="filter_clean",
+        translation_key="filter_clean",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:air-filter",
+        required_property="filter_clean",
+        value_fn=lambda controller, device_id: bool(
+            controller.get_device_property(device_id, "filter_clean")
+        ),
+    ),
 )
 
 
