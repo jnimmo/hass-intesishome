@@ -26,6 +26,8 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from . import DOMAIN, controller_identity
+from .accloud_controller import IntesisAccloud
+from .const import DEVICE_ACCLOUD
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,8 +51,9 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         device_type_schema = vol.Schema(
             {
-                vol.Required(CONF_DEVICE, default=DEVICE_INTESISHOME): vol.In(
+                vol.Required(CONF_DEVICE, default=DEVICE_ACCLOUD): vol.In(
                     [
+                        DEVICE_ACCLOUD,
                         DEVICE_AIRCONWITHME,
                         DEVICE_ANYWAIR,
                         DEVICE_INTESISHOME,
@@ -78,7 +81,12 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         cloud_schema = vol.Schema(
             {
                 vol.Required(CONF_DEVICE, default=device_type): vol.In(
-                    [DEVICE_AIRCONWITHME, DEVICE_INTESISHOME, DEVICE_ANYWAIR]
+                    [
+                        DEVICE_ACCLOUD,
+                        DEVICE_AIRCONWITHME,
+                        DEVICE_INTESISHOME,
+                        DEVICE_ANYWAIR,
+                    ]
                 ),
                 vol.Required(CONF_USERNAME): str,
                 vol.Required(CONF_PASSWORD): str,
@@ -109,6 +117,13 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     user_input[CONF_HOST],
                     user_input[CONF_USERNAME],
                     user_input[CONF_PASSWORD],
+                    loop=self.hass.loop,
+                    websession=async_get_clientsession(self.hass),
+                )
+            elif device_type == DEVICE_ACCLOUD:
+                controller = IntesisAccloud(
+                    username=user_input[CONF_USERNAME],
+                    password=user_input[CONF_PASSWORD],
                     loop=self.hass.loop,
                     websession=async_get_clientsession(self.hass),
                 )
@@ -224,6 +239,13 @@ class IntesisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     reauth_entry.data[CONF_HOST],
                     user_input[CONF_USERNAME],
                     user_input[CONF_PASSWORD],
+                    loop=self.hass.loop,
+                    websession=async_get_clientsession(self.hass),
+                )
+            elif device_type == DEVICE_ACCLOUD:
+                controller = IntesisAccloud(
+                    username=user_input[CONF_USERNAME],
+                    password=user_input[CONF_PASSWORD],
                     loop=self.hass.loop,
                     websession=async_get_clientsession(self.hass),
                 )

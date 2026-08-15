@@ -29,7 +29,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, PLATFORMS
+from .accloud_controller import IntesisAccloud
+from .const import DEVICE_ACCLOUD, DOMAIN, PLATFORMS
 
 # DOMAIN is re-exported here because climate.py (and any out-of-tree fork)
 # imports it as `from . import DOMAIN`.
@@ -76,6 +77,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     elif device_type == DEVICE_INTESISHOME_LOCAL:
         controller = IntesisHomeLocal(
             ih_host, ih_user, ih_pass, loop=hass.loop, websession=websession
+        )
+    elif device_type == DEVICE_ACCLOUD:
+        controller = IntesisAccloud(
+            ih_user, ih_pass, loop=hass.loop, websession=websession
         )
     else:
         controller = IntesisHome(
