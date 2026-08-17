@@ -89,11 +89,16 @@ _FAN_RE = re.compile(r"var selectedfanspeed = (\d+);")
 # Fallback only - see module docstring. Normal operation derives both of
 # these per-device, per-poll from _find_button_values().
 CONFIG_MODE_MAP = 31  # bits 1+2+4+8+16: auto/heat/dry/fan/cool all present
-CONFIG_FAN_MAP = {0: "auto", 1: "quiet", 2: "low", 3: "medium", 4: "high"}
+CONFIG_FAN_MAP = {0: "Auto", 1: "Quiet", 2: "Low", 3: "Medium", 4: "High"}
 
 # Positional labels for whichever non-auto fan speed values a device turns
-# out to offer - see _build_fan_map().
-_FAN_SPEED_LABELS = ("quiet", "low", "medium", "high", "very high", "max")
+# out to offer - see _build_fan_map(). Capitalized here rather than left
+# lowercase: Home Assistant's frontend only auto-capitalizes fan_mode words
+# it has a built-in translation for (a small set including "low"/"medium"/
+# "high"/"auto") and silently leaves anything else - "quiet", in practice -
+# exactly as supplied. Supplying our own Title Case avoids depending on
+# whether a given word happens to be on that list.
+_FAN_SPEED_LABELS = ("Quiet", "Low", "Medium", "High", "Very High", "Max")
 
 # The vista partial doesn't appear to expose the setpoint's allowed range
 # anywhere we've found, so these are hardcoded fallbacks (typical ducted
@@ -138,7 +143,7 @@ def _build_fan_map(values: set[int]) -> dict[int, str]:
             else f"speed {value}"
         )
     if 0 in values:
-        fan_map[0] = "auto"
+        fan_map[0] = "Auto"
     return fan_map
 
 
