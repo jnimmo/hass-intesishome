@@ -9,6 +9,6 @@
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/jnimmo/hass-intesishome/issues",
   "loggers": ["pyintesishome"],
-  "requirements": ["pyintesishome==2.2.0"],
-  "version": "2.2.0"
+  "requirements": ["pyintesishome==2.3.0"],
+  "version": "2.3.0"
 }
