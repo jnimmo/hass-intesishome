@@ -18,17 +18,22 @@ polling and _set_value are new.
 
 Caveats, since there is no documented API to check this against:
 
-- CONFIG_MODE_MAP and CONFIG_FAN_MAP below are inferred from which mode/fan
-  buttons the panel rendered for one account's device (a ducted unit
-  offering all 5 modes and a 4-speed+auto fan), not read from the page
-  itself. A device with a smaller mode/fan set would need these adjusted,
-  or -- better -- them being derived from the actual buttons rendered per
-  device rather than hardcoded (left for a follow-up; see _fetch_devices).
-- The CSRF field regex in _get_csrf_token() was written against the *login
-  POST* captured in a HAR file, not the login GET page's HTML (which
-  wasn't captured). If login fails with "Could not find CSRF token", view
-  source on https://accloud.intesis.com/login and adjust _CSRF_RE to match
-  the actual hidden input's attribute order.
+- Which modes/fan speeds a device offers, and the ambient/setpoint
+  temperature, are all read per-poll from what the status panel actually
+  renders for that specific device (see _find_button_values(),
+  _AMBIENT_TEMP_RE) rather than assumed once. CONFIG_MODE_MAP and
+  CONFIG_FAN_MAP below only serve as a fallback for the (should be rare)
+  case that a poll's markup doesn't match the expected pattern at all.
+- The portal's fan-speed buttons carry no name in their markup - every one
+  has the same generic alt="fanmode" - so _build_fan_map() below assigns
+  labels (quiet/low/medium/...) by position among whatever speed values a
+  device actually offers, not by reading real names off the page. The
+  values themselves (which speeds exist, and their uid=4 numbers) are
+  read from the page and are not a guess; only the English label text is.
+- The CSRF field regex in _get_csrf_token() was written against a real
+  GET /login response and is stable across accounts (same login form for
+  everyone), but if it ever fails, view source on the login page and
+  adjust _CSRF_INPUT_RE to match.
 - No model/firmware version is scraped, so those two device-info fields
   will show as unknown. Cosmetic only.
 - There is no push channel, so state updates are polled every
@@ -65,15 +70,30 @@ _CSRF_INPUT_RE = re.compile(r'<input\b[^>]*name="signin\[_csrf_token\]"[^>]*>', 
 _VALUE_ATTR_RE = re.compile(r'value="([^"]*)"')
 _USER_ID_RE = re.compile(r"userId=(\d+)")
 _DEVICE_LI_RE = re.compile(r'id="device_(\d+)"')
-_TEMP_RE = re.compile(r'<div class="key_value">([\d.\-]+)&deg;C</div>')
+_DEVICE_NAME_RE = re.compile(r'id="device_(\d+)_name">([^<]*)</span>')
+
+# setDeviceTempAmbiente(deviceId, '22.0') is called unconditionally in a
+# <script> block regardless of the account's display-unit preference, unlike
+# the visible "22.0&deg;C" text, which would read "&deg;F" instead for a
+# Fahrenheit-preference account and silently stop matching _TEMP_RE_FALLBACK.
+_AMBIENT_TEMP_RE = re.compile(r"setDeviceTempAmbiente\(\s*\d+\s*,\s*'([\d.\-]+)'\s*\)")
+_TEMP_RE_FALLBACK = re.compile(r'<div class="key_value">([\d.\-]+)&deg;C</div>')
+# id="setPoint_<id>" (Celsius) always exists in the DOM even when the
+# account's preference is Fahrenheit - the Fahrenheit figure lives in a
+# separate, usually-hidden id="setPointFahrenheit_<id>" span alongside it.
 _SETPOINT_RE = re.compile(r'id="setPoint_\d+"[^>]*>([\d.]+)<')
 _ONOFF_RE = re.compile(r"var selectedOnOff = (\d+);")
 _MODE_RE = re.compile(r"var selectedUsermode = (\d+);")
 _FAN_RE = re.compile(r"var selectedfanspeed = (\d+);")
 
-# Inferred, not read from the page - see module docstring.
+# Fallback only - see module docstring. Normal operation derives both of
+# these per-device, per-poll from _find_button_values().
 CONFIG_MODE_MAP = 31  # bits 1+2+4+8+16: auto/heat/dry/fan/cool all present
 CONFIG_FAN_MAP = {0: "auto", 1: "quiet", 2: "low", 3: "medium", 4: "high"}
+
+# Positional labels for whichever non-auto fan speed values a device turns
+# out to offer - see _build_fan_map().
+_FAN_SPEED_LABELS = ("quiet", "low", "medium", "high", "very high", "max")
 
 # The vista partial doesn't appear to expose the setpoint's allowed range
 # anywhere we've found, so these are hardcoded fallbacks (typical ducted
@@ -86,6 +106,40 @@ CONFIG_FAN_MAP = {0: "auto", 1: "quiet", 2: "low", 3: "medium", 4: "high"}
 # real range differs.
 CONFIG_SETPOINT_MIN = 18.0
 CONFIG_SETPOINT_MAX = 25.0
+
+
+def _find_button_values(html: str, prefix: str, device_id: str) -> set[int]:
+    """Return the integer values rendered as f'{prefix}_{device_id}_<value>'.
+
+    The status panel renders one button per mode/fan-speed value the device
+    actually supports (id="usermode_<id>_4", id="fanmode_<id>_2", etc.) -
+    reading which ones are present tells us exactly what this device offers,
+    rather than assuming every device offers the same fixed set.
+    """
+    pattern = re.compile(rf'id="{re.escape(prefix)}_{re.escape(str(device_id))}_(\d+)"')
+    return {int(value) for value in pattern.findall(html)}
+
+
+def _build_fan_map(values: set[int]) -> dict[int, str]:
+    """Best-effort name assignment for a device's fan speed values.
+
+    The portal never spells out speed names in the markup - every button's
+    alt text is the generic word "fanmode" - so labels beyond "auto" are
+    inferred from position among the values this device actually offers,
+    not read off the page. The *values* (which speeds exist, and their
+    uid=4 numbers) are real; only the English label text is a guess.
+    """
+    fan_map: dict[int, str] = {}
+    non_auto = sorted(value for value in values if value != 0)
+    for index, value in enumerate(non_auto):
+        fan_map[value] = (
+            _FAN_SPEED_LABELS[index]
+            if index < len(_FAN_SPEED_LABELS)
+            else f"speed {value}"
+        )
+    if 0 in values:
+        fan_map[0] = "auto"
+    return fan_map
 
 
 class IntesisAccloud(IntesisBase):
@@ -200,16 +254,25 @@ class IntesisAccloud(IntesisBase):
             self._authenticated = False
             return
 
+        # e.g. <span id="device_224571441985574_name">DUCTED</span> - the
+        # portal's own name for the unit, shown right next to its list entry.
+        names = dict(_DEVICE_NAME_RE.findall(html))
+
         for device_id in dict.fromkeys(found_ids):
             existing = self._devices.get(device_id, {})
+            portal_name = names.get(device_id, "").strip()
             self._devices[device_id] = {
                 **existing,
-                "name": existing.get("name") or f"Intesis {device_id}",
+                "name": portal_name or existing.get("name") or f"Intesis {device_id}",
             }
-            # Static per-device config the vista page doesn't expose a raw
-            # code for - see module docstring caveats.
-            self._update_device_state(device_id, 61, CONFIG_MODE_MAP)
-            self._devices[device_id]["config_fan_map"] = CONFIG_FAN_MAP
+            # This page has no mode/fan-speed buttons to read - only the
+            # status panel does (see _fetch_device_status, which runs right
+            # after this in the same poll cycle and overwrites both with the
+            # real per-device values). This is just so a device isn't left
+            # with neither on the very first poll before that's happened.
+            if "config_fan_map" not in self._devices[device_id]:
+                self._update_device_state(device_id, 61, CONFIG_MODE_MAP)
+                self._devices[device_id]["config_fan_map"] = CONFIG_FAN_MAP
             # uid 35/36 = setpoint_min/setpoint_max, stored as tenths of a
             # degree to match how IntesisBase.get_min_setpoint()/
             # get_max_setpoint() divide by 10.
@@ -231,7 +294,25 @@ class IntesisAccloud(IntesisBase):
         mode_match = _MODE_RE.search(html)
         fan_match = _FAN_RE.search(html)
         setpoint_match = _SETPOINT_RE.search(html)
-        temp_match = _TEMP_RE.search(html)
+        # setDeviceTempAmbiente() is unit-agnostic (always Celsius); the
+        # visible "&deg;C" text is not, if the account's preference is
+        # Fahrenheit - see the module docstring and _AMBIENT_TEMP_RE comment.
+        temp_match = _AMBIENT_TEMP_RE.search(html) or _TEMP_RE_FALLBACK.search(html)
+
+        # Which modes/fan speeds this device actually offers, read from the
+        # buttons rendered on its own status panel rather than assumed - see
+        # _find_button_values(). Only overwrites config_mode_map/
+        # config_fan_map when something was actually found, so a page that
+        # doesn't match (e.g. mid-session-expiry) doesn't wipe out the last
+        # known-good values.
+        if mode_values := _find_button_values(html, "usermode", device_id):
+            self._update_device_state(
+                device_id, 61, sum(1 << value for value in mode_values)
+            )
+        if fan_values := _find_button_values(html, "fanmode", device_id):
+            self._devices[str(device_id)]["config_fan_map"] = _build_fan_map(
+                fan_values
+            )
 
         if onoff_match:
             self._update_device_state(device_id, 1, int(onoff_match.group(1)))
