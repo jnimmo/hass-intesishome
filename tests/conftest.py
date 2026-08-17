@@ -69,7 +69,11 @@ def mock_controller() -> Generator[MagicMock]:
         controller.device_type = "IntesisHome"
         controller.controller_id = MOCK_CONTROLLER_ID
         controller.name = MOCK_DEVICE_NAME
-        controller.is_connected = True
+        # is_available is what entities gate on; is_connected is only the
+        # raw push-socket state and is False in normal operation since
+        # pyintesishome 2.3.0.
+        controller.is_available = True
+        controller.is_connected = False
         controller.error_message = None
 
         controller.get_devices.return_value = {MOCK_DEVICE_ID: MOCK_DEVICE}

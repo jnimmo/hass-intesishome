@@ -55,7 +55,11 @@ BINARY_SENSOR_TYPES: tuple[IntesisBinarySensorEntityDescription, ...] = (
         # A connectivity sensor that goes unavailable when the connection
         # drops reports nothing at exactly the moment it is needed.
         always_available=True,
-        value_fn=lambda controller, device_id: controller.is_connected,
+        # is_available, not is_connected: the cloud push socket is opened
+        # only for commands and left down the rest of the time, so
+        # is_connected here would report "disconnected" on a perfectly
+        # healthy account that is being polled over HTTPS.
+        value_fn=lambda controller, device_id: controller.is_available,
     ),
     IntesisBinarySensorEntityDescription(
         key="filter_clean",

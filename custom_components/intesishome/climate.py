@@ -114,7 +114,7 @@ class IntesisAC(IntesisEntity, ClimateEntity):
         """Initialize the thermostat."""
         super().__init__(controller, ih_device_id, ih_device, host)
         self._host: str | None = host
-        self._connected: bool = False
+        self._available: bool = False
         self._setpoint_step: float = 1.0
         self._current_temp: float = None
         self._max_temp: float = None
@@ -350,7 +350,7 @@ class IntesisAC(IntesisEntity, ClimateEntity):
     async def async_update(self):
         """Copy values from controller dictionary to climate device."""
         # Update values from controller's device dictionary
-        self._connected = self._controller.is_connected
+        self._available = self._controller.is_available
         self._current_temp = self._controller.get_temperature(self._device_id)
         self._fan_speed = self._controller.get_fan_speed(self._device_id)
         self._power = self._controller.is_on(self._device_id)
@@ -403,13 +403,17 @@ class IntesisAC(IntesisEntity, ClimateEntity):
 
     async def async_update_callback(self, device_id=None):
         """Let HA know there has been an update from the controller."""
-        # Track connection-state transitions for logging.
-        if self._controller and not self._controller.is_connected and self._connected:
-            self._connected = False
-            _LOGGER.info("Connection to %s API was lost", self._device_type)
-        elif self._controller and self._controller.is_connected and not self._connected:
-            self._connected = True
-            _LOGGER.debug("Connection to %s API was restored", self._device_type)
+        # Track availability transitions for logging. This follows
+        # is_available rather than is_connected so it logs when state
+        # actually stops arriving, not on every cloud push-socket drop --
+        # those are routine since pyintesishome 2.3.0 stopped reconnecting
+        # the socket and moved state onto HTTPS polling.
+        if self._controller and not self._controller.is_available and self._available:
+            self._available = False
+            _LOGGER.info("No longer receiving state from the %s API", self._device_type)
+        elif self._controller and self._controller.is_available and not self._available:
+            self._available = True
+            _LOGGER.debug("Receiving state from the %s API again", self._device_type)
 
         await super().async_update_callback(device_id)
 
@@ -457,10 +461,11 @@ class IntesisAC(IntesisEntity, ClimateEntity):
         """List of available horizontal swing positions."""
         return self._swing_horizontal_list
 
-    @property
-    def available(self) -> bool:
-        """If the device hasn't been able to connect, mark as unavailable."""
-        return self._connected or self._connected is None
+    # No `available` override: IntesisEntity.available reads
+    # controller.is_available live. The old override served a cached
+    # `_connected` flag that could only be refreshed by an update, so an
+    # entity that stopped receiving updates kept reporting available. The
+    # cached flag survives purely to detect transitions for logging.
 
     @property
     def current_temperature(self) -> float | None:

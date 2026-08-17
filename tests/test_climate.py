@@ -19,7 +19,13 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.const import ATTR_ENTITY_ID, ATTR_TEMPERATURE, Platform, STATE_OFF
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    ATTR_TEMPERATURE,
+    Platform,
+    STATE_OFF,
+    STATE_UNAVAILABLE,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -44,6 +50,32 @@ async def test_entities(
     await snapshot_platform(
         hass, entity_registry, snapshot, mock_config_entry.entry_id
     )
+
+
+async def test_available_while_socket_is_down(
+    hass: HomeAssistant, mock_controller: MagicMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A closed push socket alone must not make the entity unavailable.
+
+    This is the regression guard for #50: since pyintesishome 2.3.0 the cloud
+    socket is opened only for commands and never reconnected, so is_connected
+    is False on a perfectly healthy account whose state arrives via polling.
+    """
+    mock_controller.is_connected = False
+    mock_controller.is_available = True
+    await setup_integration(hass, mock_config_entry)
+
+    assert hass.states.get(ENTITY_ID).state != STATE_UNAVAILABLE
+
+
+async def test_unavailable_when_state_stops_arriving(
+    hass: HomeAssistant, mock_controller: MagicMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """is_available going False does make the entity unavailable."""
+    mock_controller.is_available = False
+    await setup_integration(hass, mock_config_entry)
+
+    assert hass.states.get(ENTITY_ID).state == STATE_UNAVAILABLE
 
 
 async def test_supported_features_minimal(

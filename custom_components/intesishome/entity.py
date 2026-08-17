@@ -130,10 +130,17 @@ class IntesisEntity(Entity):
 
     @property
     def available(self) -> bool:
-        """Availability tracks the controller session, nothing else.
+        """Availability tracks the controller's path to the device.
+
+        Gated on is_available, not is_connected: since pyintesishome 2.3.0
+        the cloud push socket is opened only to carry commands and is not
+        reconnected when it drops, so is_connected is False during normal
+        operation. is_available is True while either the socket is up or a
+        recent HTTP poll succeeded, which is what "we still have current
+        state for this device" actually means.
 
         A value that is merely absent right now must stay available and
         report None (rendered as "unknown"); flipping to unavailable would
         break recorder statistics and fire unavailability automations.
         """
-        return self._controller.is_connected
+        return self._controller.is_available

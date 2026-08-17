@@ -107,11 +107,15 @@ checks either way.
   Entities must **never** call `controller.stop()` themselves; the controller's lifecycle belongs to
   the integration (`async_unload_entry`), and stopping it from an entity would tear down the shared
   session for every other entity on the config entry.
-- A default `available` that tracks `controller.is_connected` and nothing else. A datapoint that's
-  merely absent right now should still report `None` ("unknown") and stay *available* — flipping to
-  unavailable on a transient missing value would shred recorder long-term statistics and fire
-  unavailability automations unnecessarily. `climate.py`'s `IntesisAC` overrides this with its own
-  cached `_connected` flag (predates the shared base) rather than using the live property directly.
+- A default `available` that tracks `controller.is_available` and nothing else — every platform,
+  `climate.py` included, inherits it. **Never gate availability on `is_connected`**: since
+  pyintesishome 2.3.0 the cloud push socket is opened only to carry commands and is deliberately not
+  reconnected when it drops, so `is_connected` is `False` in normal operation while state keeps
+  arriving over HTTPS polling. `is_available` is true while either the socket is up or a recent poll
+  succeeded. `IntesisAC` still keeps a cached `_available` flag, but only to detect transitions for
+  logging — not to answer `available`. A datapoint that's merely absent right now should still report
+  `None` ("unknown") and stay *available* — flipping to unavailable on a transient missing value would
+  shred recorder long-term statistics and fire unavailability automations unnecessarily.
 
 `climate.py`'s `IntesisAC` sets `_attr_name = None` (the HA "primary entity" pattern) so it inherits
 the device's own name for `friendly_name`, while `entity_id` stays whatever was already registered —
