@@ -34,14 +34,15 @@ Download the `custom_components/intesishome` directory into your Home Assistant 
 ---
 
 ## Device types
-
-| Device type       | Protocol     | Required details                              |
-| ----------------- | ------------ | --------------------------------------------- |
-| IntesisHome       | Cloud        | Username and password                         |
-| anywAir           | Cloud        | Username and password                         |
-| airconwithme      | Cloud        | Username and password                         |
-| IntesisBox        | Local (WMP)  | IP address or hostname                        |
-| IntesisHome Local | Local (HTTP) | IP address or hostname, username and password |
+ 
+| Device type        | Protocol     | Required details                              |
+| ------------------- | ------------ | --------------------------------------------- |
+| AC Cloud Control    | Cloud        | Username and password                         |
+| IntesisHome         | Cloud        | Username and password                         |
+| anywAir             | Cloud        | Username and password                         |
+| airconwithme        | Cloud        | Username and password                         |
+| IntesisBox          | Local (WMP)  | IP address or hostname                        |
+| IntesisHome Local   | Local (HTTP) | IP address or hostname, username and password |
 
 ---
 
