@@ -190,7 +190,7 @@ class IntesisAC(IntesisEntity, ClimateEntity):
         await super().async_added_to_hass()
 
     @property
-    def temperature_unit(self):
+    def native_temperature_unit(self):
         """Intesishome API uses celsius on the backend."""
         return UnitOfTemperature.CELSIUS
 
@@ -468,7 +468,7 @@ class IntesisAC(IntesisEntity, ClimateEntity):
     # cached flag survives purely to detect transitions for logging.
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Return the current temperature."""
         return self._current_temp
 
@@ -480,7 +480,7 @@ class IntesisAC(IntesisEntity, ClimateEntity):
         return HVACMode.OFF
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return the current setpoint temperature if unit is on."""
 
         # Don't show temperature for FAN_ONLY mode (no temperature control)
